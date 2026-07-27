@@ -1,0 +1,3 @@
+# Canonical portable release environment.
+# setup.ps1 installs the fully pinned direct-dependency lock below.
+-r requirements-lock.txt

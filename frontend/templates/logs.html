@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% set active = 'logs' %}
+{% block title %}AI_CAM — System Logs{% endblock %}
+
+{% block pagehead %}
+  <h1 data-i18n="logs.title">System Logs</h1>
+  <p data-i18n="logs.sub">Real-time monitoring of all system activity</p>
+{% endblock %}
+
+{% block content %}
+<div class="content">
+
+  <!-- ===== Statistics ===== -->
+  <div class="tiles tiles-7">
+    <div class="tile"><div class="t-top"><span class="t-label" data-i18n="logs.total">Total</span></div><div class="t-value" id="stTotal">0</div></div>
+    <div class="tile bad"><div class="t-top"><span class="t-label" data-i18n="logs.errors">Errors</span></div><div class="t-value" id="stErr">0</div></div>
+    <div class="tile warn"><div class="t-top"><span class="t-label" data-i18n="logs.warnings">Warnings</span></div><div class="t-value" id="stWarn">0</div></div>
+    <div class="tile"><div class="t-top"><span class="t-label" data-i18n="logs.plc_reconnect">PLC Reconnects</span></div><div class="t-value" id="stPlc">0</div></div>
+    <div class="tile ok"><div class="t-top"><span class="t-label" data-i18n="logs.rfid_read">RFID Reads</span></div><div class="t-value" id="stRfid">0</div></div>
+    <div class="tile ok"><div class="t-top"><span class="t-label" data-i18n="logs.ocr_success">OCR Success</span></div><div class="t-value" id="stOcr">0</div></div>
+    <div class="tile"><div class="t-top"><span class="t-label" data-i18n="logs.cam_disconnect">Camera Disconnects</span></div><div class="t-value" id="stCam">0</div></div>
+  </div>
+
+  <!-- ===== Connections + Performance ===== -->
+  <div class="settings-grid">
+    <div class="card"><div class="card-head"><span data-i18n="logs.connections">Connections</span></div><div class="card-body">
+      <div class="conn-row">
+        <span class="c-name"><span class="status-dot off" id="connPlcDot"></span>PLC</span>
+        <span class="c-meta" id="connPlc">—</span>
+      </div>
+      <div class="conn-row">
+        <span class="c-name"><span class="status-dot off" id="connRfidDot"></span>RFID</span>
+        <span class="c-meta" id="connRfid">—</span>
+      </div>
+      <div class="conn-row">
+        <span class="c-name"><span class="status-dot off" id="connCamDot"></span><span data-i18n="dash.camera">Camera</span></span>
+        <span class="c-meta" id="connCam">—</span>
+      </div>
+    </div></div>
+
+    <div class="card"><div class="card-head"><span data-i18n="logs.performance">Performance</span></div><div class="card-body">
+      <div class="metric-grid">
+        <div class="metric"><div class="m-val" id="mFps">0</div><div class="m-lab" data-i18n="logs.fps">FPS</div></div>
+        <div class="metric"><div class="m-val" id="mOcr">0 ms</div><div class="m-lab" data-i18n="logs.ocr_ms">OCR time</div></div>
+        <div class="metric"><div class="m-val" id="mCpu">—</div><div class="m-lab" data-i18n="logs.cpu">CPU</div></div>
+        <div class="metric"><div class="m-val" id="mRam">—</div><div class="m-lab" data-i18n="logs.ram">RAM</div></div>
+        <div class="metric"><div class="m-val" id="mPlc">0 ms</div><div class="m-lab" data-i18n="logs.plc_interval">PLC poll</div></div>
+        <div class="metric"><div class="m-val" id="mRfid">0 ms</div><div class="m-lab" data-i18n="logs.rfid_interval">RFID window</div></div>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- ===== Log viewer ===== -->
+  <div class="card">
+    <div class="card-head">
+      <span><span class="live-dot" id="liveDot"></span><span id="liveLabel" data-i18n="logs.live">LIVE</span></span>
+      <span class="sub" id="logCount">0</span>
+    </div>
+    <div class="card-body">
+      <div class="toolbar">
+        <select id="fSource" style="min-width:140px">
+          <option value="" data-i18n="logs.all_sources">All sources</option>
+          <option value="SYSTEM">SYSTEM</option><option value="PLC">PLC</option><option value="RFID">RFID</option>
+          <option value="CAMERA">CAMERA</option><option value="OCR">OCR</option><option value="API">API</option>
+          <option value="AUTH">AUTH</option><option value="DATABASE">DATABASE</option><option value="ERROR">ERROR</option>
+        </select>
+        <select id="fLevel" style="min-width:130px">
+          <option value="" data-i18n="logs.all_levels">All levels</option>
+          <option value="DEBUG">DEBUG</option><option value="INFO">INFO</option><option value="WARNING">WARNING</option>
+          <option value="ERROR">ERROR</option><option value="CRITICAL">CRITICAL</option>
+        </select>
+        <input id="fSearch" type="text" data-i18n-ph="logs.search_ph" style="min-width:200px" spellcheck="false">
+        <input id="fStart" type="datetime-local" title="From">
+        <input id="fEnd" type="datetime-local" title="To">
+        <button id="btnSearch" class="btn btn-ghost btn-sm" data-i18n="common.search">Search</button>
+        <button id="btnLive" class="btn btn-ghost btn-sm" data-i18n="logs.live">LIVE</button>
+        <label class="switch"><input type="checkbox" id="autoScroll" checked><span class="track"></span><span data-i18n="logs.autoscroll">Auto-scroll</span></label>
+        <span class="spacer"></span>
+        <button class="btn btn-ghost btn-sm dl" data-fmt="txt">TXT</button>
+        <button class="btn btn-ghost btn-sm dl" data-fmt="csv">CSV</button>
+        <button class="btn btn-ghost btn-sm dl" data-fmt="json">JSON</button>
+        <button id="btnClear" class="btn btn-danger btn-sm" data-i18n="logs.clear">Clear</button>
+      </div>
+      <div id="logPanel" class="log-panel tall"></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+{% endblock %}
+
+{% block scripts %}<script src="/static/js/logs.js"></script>{% endblock %}

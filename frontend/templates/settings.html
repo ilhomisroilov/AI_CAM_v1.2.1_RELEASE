@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% set active = 'settings' %}
+{% block title %}AI_CAM — Settings{% endblock %}
+
+{% block pagehead %}
+  <h1 data-i18n="set.title">Settings</h1>
+  <p data-i18n="set.sub">Edit configuration (config/settings.yaml)</p>
+{% endblock %}
+
+{% block content %}
+<div class="content">
+
+  <div class="card">
+    <div class="card-head">
+      <span data-i18n="set.config">Configuration</span>
+      <div class="row" style="gap:8px">
+        <button id="btnReload" class="btn btn-ghost btn-sm" data-i18n="set.reload">Reload</button>
+        <button id="btnDefaults" class="btn btn-ghost btn-sm" data-i18n="set.restore_defaults">Restore Defaults</button>
+        <button id="btnSave" class="btn btn-primary btn-sm" data-i18n="set.save_config">Save Configuration</button>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="tabs">
+        <button id="tabForm" class="active" data-i18n="set.form">Form</button>
+        <button id="tabYaml" data-i18n="set.raw_yaml">Raw YAML</button>
+      </div>
+
+      <!-- ===== FORM PANEL ===== -->
+      <div id="panelForm">
+        <div class="settings-grid">
+
+          <div class="card"><div class="card-head"><span data-i18n="set.camera">Camera Settings</span></div><div class="card-body">
+            <div class="form-row"><label>Camera IP</label><input data-path="camera.ip" data-type="str"></div>
+            <div class="form-row"><label>CoLa Port</label><input data-path="camera.cola_port" data-type="int" type="number"></div>
+            <div class="form-row"><label>BLOB Port</label><input data-path="camera.blob_port" data-type="int" type="number"></div>
+            <div class="form-row"><label>CoLa Password</label><input data-path="camera.password" data-type="str"></div>
+          </div></div>
+
+          <div class="card"><div class="card-head"><span data-i18n="set.plc">PLC Settings</span></div><div class="card-body">
+            <div class="form-row"><label>Enabled</label><select data-path="plc.enabled" data-type="bool"><option value="true">true</option><option value="false">false</option></select></div>
+            <div class="form-row"><label>Mode</label><select data-path="plc.mode" data-type="str"><option value="simulator">simulator</option><option value="melsec">melsec</option></select></div>
+            <div class="form-row"><label>IP Address</label><input data-path="plc.ip" data-type="str"></div>
+            <div class="form-row"><label>Port</label><input data-path="plc.port" data-type="int" type="number"></div>
+            <div class="form-row"><label>Device Type</label><input data-path="plc.plc_type" data-type="str"></div>
+            <div class="form-row"><label>Signal Register</label><input data-path="plc.signal_address" data-type="str"></div>
+            <div class="form-row"><label>Poll Interval (ms)</label><input data-path="plc.poll_interval_ms" data-type="int" type="number"></div>
+          </div></div>
+
+          <div class="card"><div class="card-head"><span data-i18n="set.rfid">RFID Settings</span></div><div class="card-body">
+            <div class="form-row"><label>Enabled</label><select data-path="rfid.enabled" data-type="bool"><option value="true">true</option><option value="false">false</option></select></div>
+            <div class="form-row"><label>Reader Mode</label><select data-path="rfid.mode" data-type="str"><option value="simulator">simulator</option><option value="r700">r700</option></select></div>
+            <div class="form-row"><label>IP Address</label><input data-path="rfid.ip_address" data-type="str"></div>
+            <div class="form-row"><label>Port</label><input data-path="rfid.port" data-type="int" type="number"></div>
+            <div class="form-row"><label>Timeout (s)</label><input data-path="rfid.timeout" data-type="int" type="number"></div>
+            <div class="form-row"><label>Inventory Window (ms)</label><input data-path="rfid.inventory_duration_ms" data-type="int" type="number"></div>
+            <div class="form-row"><label>Retry Window (ms)</label><input data-path="rfid.inventory_retry_duration_ms" data-type="int" type="number"></div>
+            <div class="form-row"><label>TX Power (cdBm)</label><input data-path="rfid.tx_power_cdbm" data-type="int" type="number"></div>
+            <div class="form-row"><label>EPC Decimal Validate</label><select data-path="rfid.epc_decimal_validate" data-type="bool"><option value="true">true</option><option value="false">false</option></select></div>
+          </div></div>
+
+          <div class="card"><div class="card-head"><span data-i18n="set.ai">AI Settings</span></div><div class="card-body">
+            <div class="form-row"><label>YOLO Conf Threshold</label><input data-path="detection.conf_threshold" data-type="float" type="number" step="0.01"></div>
+            <div class="form-row"><label>OCR Trigger Conf</label><input data-path="detection.ocr_trigger_conf" data-type="float" type="number" step="0.01"></div>
+            <div class="form-row"><label>Device</label><select data-path="detection.device" data-type="str"><option value="auto">auto</option><option value="cuda:0">cuda:0</option><option value="cpu">cpu</option></select></div>
+            <div class="form-row"><label>OCR use GPU</label><select data-path="ocr.use_gpu" data-type="bool"><option value="true">true</option><option value="false">false</option></select></div>
+            <div class="form-row"><label>OCR Min Confidence</label><input data-path="ocr.min_confidence" data-type="float" type="number" step="0.01"></div>
+          </div></div>
+
+          <div class="card"><div class="card-head"><span data-i18n="set.database">Database Settings</span></div><div class="card-body">
+            <div class="form-row"><label>Database Path</label><input value="data/ai_cam.db" disabled></div>
+            <div class="form-row"><label>Engine</label><input value="SQLite (thread-safe)" disabled></div>
+            <p class="muted" style="font-size:12.5px;margin-top:8px" data-i18n="set.db_note">Database path is fixed in config.py.</p>
+          </div></div>
+
+          <div class="card"><div class="card-head"><span data-i18n="set.system">System Settings</span></div><div class="card-body">
+            <div class="form-row"><label>Session Timeout (s)</label><input data-path="session.timeout_sec" data-type="int" type="number"></div>
+            <div class="form-row"><label>Server Port</label><input data-path="server.port" data-type="int" type="number"></div>
+            <div class="form-row"><label>Auth Session TTL (s)</label><input data-path="auth.session_ttl_sec" data-type="int" type="number"></div>
+            <div class="form-row"><label data-i18n="set.theme">Theme</label>
+              <div class="seg theme-seg"><button data-theme="light" data-i18n="theme.light">Light</button><button data-theme="dark" data-i18n="theme.dark">Dark</button><button data-theme="glass" data-i18n="theme.glass">Liquid Glass</button></div></div>
+            <div class="form-row"><label data-i18n="set.language">Language</label>
+              <div class="seg lang-seg"><button data-lang="en">English</button><button data-lang="uz">O‘zbek</button></div></div>
+            <div class="form-row"><label data-i18n="set.version">Version</label><input data-version value="{{ 'v' ~ request.app.version }}" disabled></div>
+          </div></div>
+
+        </div>
+        <p class="muted" style="font-size:12.5px;margin-top:14px" data-i18n="set.note">Saving updates config/settings.yaml.</p>
+      </div>
+
+      <!-- ===== YAML PANEL ===== -->
+      <div id="panelYaml" style="display:none">
+        <div class="toolbar">
+          <button id="btnValidate" class="btn btn-ghost btn-sm" data-i18n="set.validate">Validate</button>
+          <button id="btnSaveYaml" class="btn btn-primary btn-sm" data-i18n="set.save_yaml">Save YAML</button>
+          <span class="spacer"></span>
+          <span class="muted" id="yamlStatus" style="font-size:12.5px"></span>
+        </div>
+        <textarea id="yamlEditor" class="yaml-editor" spellcheck="false"></textarea>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+{% endblock %}
+
+{% block scripts %}<script src="/static/js/settings.js"></script>{% endblock %}

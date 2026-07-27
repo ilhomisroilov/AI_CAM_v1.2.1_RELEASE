@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% set active = 'history' %}
+{% block title %}AI_CAM — History{% endblock %}
+
+{% block pagehead %}
+  <h1 data-i18n="hist.title">History</h1>
+  <p data-i18n="hist.sub">Detected VIN &amp; RFID records</p>
+{% endblock %}
+
+{% block content %}
+<div class="content">
+
+  <!-- Stats row -->
+  <div class="tiles tiles-4">
+    <div class="tile ok"><div class="t-top"><span class="t-label" data-i18n="hist.total">Total Records</span></div><div class="t-value" id="stTotal">0</div></div>
+    <div class="tile warn"><div class="t-top"><span class="t-label" data-i18n="hist.today">Today's Records</span></div><div class="t-value" id="stToday">0</div></div>
+    <div class="tile bad"><div class="t-top"><span class="t-label" data-i18n="hist.rfid_matches">RFID Matches</span></div><div class="t-value" id="stRfid">0</div></div>
+    <div class="tile ok"><div class="t-top"><span class="t-label" data-i18n="hist.vin_rate">VIN Success Rate</span></div><div class="t-value" id="stRate">0%</div></div>
+  </div>
+
+  <!-- Filters -->
+  <div class="card">
+    <div class="card-head"><span data-i18n="hist.search_filter">Search &amp; Filter</span></div>
+    <div class="card-body">
+      <div class="filterbar">
+        <div class="field"><label data-i18n="hist.vin_search">VIN search</label>
+          <input id="searchVin" type="text" data-i18n-ph="hist.vin_search" spellcheck="false"></div>
+        <div class="field"><label data-i18n="hist.epc_search">EPC search</label>
+          <input id="searchEpc" type="text" data-i18n-ph="hist.epc_search" spellcheck="false"></div>
+        <div class="field"><label data-i18n="hist.model">Model</label>
+          <select id="filterModel"><option value="" data-i18n="hist.all">All</option><option value="QY">QY</option><option value="BL7M">BL7M</option></select></div>
+        <div class="field"><label data-i18n="hist.min_score">Min score</label>
+          <select id="filterScore"><option value="0" data-i18n="hist.any">Any</option><option value="0.5">≥ 50%</option><option value="0.7">≥ 70%</option><option value="0.85">≥ 85%</option><option value="0.95">≥ 95%</option></select></div>
+        <div class="field"><label data-i18n="hist.from">From</label><input id="dateStart" type="datetime-local"></div>
+        <div class="field"><label data-i18n="hist.to">To</label><input id="dateEnd" type="datetime-local"></div>
+        <button id="btnSearch" class="btn btn-primary" data-i18n="common.search">Search</button>
+        <button id="btnClearFilter" class="btn btn-ghost" data-i18n="common.clear">Clear</button>
+      </div>
+
+      <div class="toolbar">
+        <button id="btnRefresh" class="btn btn-ghost" data-i18n="common.refresh">Refresh</button>
+        <label class="switch"><input type="checkbox" id="autoRefresh" checked><span class="track"></span><span data-i18n="hist.auto">Auto-refresh</span></label>
+        <span class="spacer"></span>
+        <span class="muted" style="font-size:13px"><span data-i18n="hist.showing">Showing</span> <b id="shownCount">0</b> <span data-i18n="hist.of">of</span> <b id="totalCount">0</b></span>
+        <button id="btnCsv" class="btn btn-secondary" data-i18n="common.export_csv">Export CSV</button>
+        <button id="btnXlsx" class="btn btn-accent" data-i18n="common.export_excel">Export Excel</button>
+      </div>
+
+      <div class="table-wrap">
+        <table id="recTable">
+          <thead>
+            <tr>
+              <th data-sort="id">#</th>
+              <th data-sort="timestamp" data-i18n="hist.c_time">Timestamp</th>
+              <th data-sort="model" data-i18n="hist.c_model">Model</th>
+              <th data-sort="detected_vin" data-i18n="hist.c_vin">VIN (validated)</th>
+              <th data-i18n="hist.c_epc">RFID EPC</th>
+              <th data-i18n="hist.c_raw">Raw OCR</th>
+              <th data-sort="confidence" data-i18n="hist.c_score">Score</th>
+              <th data-i18n="hist.c_status">Status</th>
+              <th data-i18n="hist.c_image">Image</th>
+            </tr>
+          </thead>
+          <tbody id="recBody"><tr><td colspan="9" class="empty" data-i18n="hist.loading">Loading…</td></tr></tbody>
+        </table>
+      </div>
+
+      <div class="pager">
+        <button id="pgPrev" class="btn btn-ghost btn-sm" data-i18n="hist.prev">Prev</button>
+        <span class="pinfo" id="pageInfo">Page 1</span>
+        <button id="pgNext" class="btn btn-ghost btn-sm" data-i18n="hist.next">Next</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Image preview modal -->
+<div class="modal" id="imgModal">
+  <div class="modal-card">
+    <button class="btn btn-ghost btn-sm modal-x" id="imgClose" data-i18n="common.close">Close</button>
+    <div class="pad"><img id="imgModalImg" src="" alt=""><div class="muted mono" id="imgCaption" style="margin-top:10px"></div></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}<script src="/static/js/history.js"></script>{% endblock %}

@@ -1,0 +1,59 @@
+# Python environments and caches
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Secrets and local overrides
+.env
+.env.*
+!.env.example
+
+# Release runtime data (placeholders remain tracked)
+runtime/data/*
+!runtime/data/.gitkeep
+runtime/logs/*
+!runtime/logs/.gitkeep
+runtime/crops/*
+!runtime/crops/.gitkeep
+runtime/temp/*
+!runtime/temp/.gitkeep
+runtime/engraved_ocr_collection/*
+!runtime/engraved_ocr_collection/.gitkeep
+runtime/dataset_collected/*
+
+# Legacy runtime locations (must never ship with data)
+data/crops/*
+data/vin_ocr_dataset/
+data/*.db
+data/*.db-*
+data/*.zip
+data/crrr/
+logs/*.log
+logs/*.log.*
+dataset/collected_raw/*
+
+# Any database/log generated outside the canonical runtime tree
+*.db
+*.db-*
+*.log
+
+# Build/package output
+dist/
+build/
+*.spec.bak
+
+# Benchmark/diagnostic payloads
+*.bin
+payload_*.bin
+backup_manifest.current.json
+requirements.freeze.current.txt
+
+# IDE/OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

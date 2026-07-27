@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="glass">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI_CAM — Sign in</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <script src="/static/js/theme.js"></script>
+</head>
+<body>
+  <div class="login-wrap">
+    <form class="login-card" method="post" action="/login" autocomplete="off">
+      <div class="login-brand">
+        <span class="sb-logo lg">
+          <svg class="logo-glyph" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+            <g fill="#fff">
+              <circle cx="41" cy="24" r="2"/><circle cx="38.7" cy="32.5" r="2"/><circle cx="32.5" cy="38.7" r="2"/>
+              <circle cx="24" cy="41" r="2"/><circle cx="15.5" cy="38.7" r="2"/><circle cx="9.3" cy="32.5" r="2"/>
+              <circle cx="7" cy="24" r="2"/><circle cx="9.3" cy="15.5" r="2"/><circle cx="15.5" cy="9.3" r="2"/>
+              <circle cx="24" cy="7" r="2"/><circle cx="32.5" cy="9.3" r="2"/><circle cx="38.7" cy="15.5" r="2"/>
+            </g>
+            <circle cx="24" cy="24" r="9.5" stroke="#fff" stroke-width="2.6"/>
+            <circle cx="24" cy="24" r="4.6" fill="#fff"/>
+            <circle cx="21.4" cy="21.4" r="1.5" fill="rgba(0,0,0,.22)"/>
+          </svg>
+        </span>
+        <div class="name">AI_CAM<small>VIN Vision</small></div>
+      </div>
+      <h2>Sign in to continue</h2>
+
+      {% if error %}
+      <div class="login-error">{{ error }}</div>
+      {% endif %}
+
+      <div class="field">
+        <label for="username">Username</label>
+        <input id="username" name="username" type="text" required autofocus placeholder="admin" spellcheck="false">
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" required placeholder="••••••••">
+      </div>
+
+      <button type="submit" class="btn btn-primary login-btn btn-block">Sign in</button>
+      <p class="login-hint">Authorized personnel only · Automotive</p>
+    </form>
+  </div>
+</body>
+</html>

@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% set active = 'dashboard' %}
+{% block title %}AI_CAM — Dashboard{% endblock %}
+
+{% block pagehead %}
+  <div class="brand-hero">
+    <span class="sb-logo lg">
+      <svg class="logo-glyph" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+        <g fill="#fff">
+          <circle cx="41" cy="24" r="2"/><circle cx="38.7" cy="32.5" r="2"/><circle cx="32.5" cy="38.7" r="2"/>
+          <circle cx="24" cy="41" r="2"/><circle cx="15.5" cy="38.7" r="2"/><circle cx="9.3" cy="32.5" r="2"/>
+          <circle cx="7" cy="24" r="2"/><circle cx="9.3" cy="15.5" r="2"/><circle cx="15.5" cy="9.3" r="2"/>
+          <circle cx="24" cy="7" r="2"/><circle cx="32.5" cy="9.3" r="2"/><circle cx="38.7" cy="15.5" r="2"/>
+        </g>
+        <circle cx="24" cy="24" r="9.5" stroke="#fff" stroke-width="2.6"/>
+        <circle cx="24" cy="24" r="4.6" fill="#fff"/>
+        <circle cx="21.4" cy="21.4" r="1.5" fill="rgba(0,0,0,.22)"/>
+      </svg>
+    </span>
+  </div>
+  <h1 class="brand-title">AI_CAM</h1>
+  <p class="brand-sub" data-i18n="brand.sub">VIN Vision</p>
+  <p class="brand-ver"><span data-i18n="common.version">Version</span> <b data-version>{{ 'v' ~ request.app.version }}</b></p>
+{% endblock %}
+
+{% block content %}
+<div class="content dashboard-content">
+
+  <!-- Status cards: Camera · PLC · RFID · AI · Last VIN -->
+  <div class="tiles tiles-5">
+    <div id="tileCam" class="tile">
+      <div class="t-top"><span class="t-label" data-i18n="dash.camera">Camera</span>
+        <span class="t-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg></span></div>
+      <div class="t-value" id="tCam">—</div><div class="t-sub" id="tCamSub"></div>
+    </div>
+    <div id="tilePlc" class="tile">
+      <div class="t-top"><span class="t-label" data-i18n="dash.plc">PLC</span>
+        <span class="t-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6H9z"/><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2"/></svg></span></div>
+      <div class="t-value" id="tPlc">—</div><div class="t-sub" id="tPlcSub"></div>
+    </div>
+    <div id="tileRfid" class="tile">
+      <div class="t-top"><span class="t-label" data-i18n="dash.rfid">RFID</span>
+        <span class="t-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 9a9 9 0 0 1 0 6M8.5 7a13 13 0 0 1 0 10M12 5a17 17 0 0 1 0 14"/><circle cx="18" cy="12" r="2"/></svg></span></div>
+      <div class="t-value vin" id="tRfid">—</div><div class="t-sub" id="tRfidSub"></div>
+    </div>
+    <div id="tileAi" class="tile">
+      <div class="t-top"><span class="t-label" data-i18n="dash.ai">AI Status</span>
+        <span class="t-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 9h6v6H9z"/><path d="M2 10h2M2 14h2M20 10h2M20 14h2M10 2v2M14 2v2M10 20v2M14 20v2"/></svg></span></div>
+      <div class="t-value" id="tAi">—</div><div class="t-sub" id="tAiSub"></div>
+    </div>
+    <div id="tileVin" class="tile">
+      <div class="t-top"><span class="t-label" data-i18n="dash.lastvin">Last VIN</span>
+        <span class="t-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg></span></div>
+      <div class="t-value vin" id="tVin">—</div><div class="t-sub" id="tVinSub"></div>
+    </div>
+  </div>
+
+  <!-- Live stream + PLC control -->
+  <div class="card live-card">
+    <div class="card-head">
+      <span class="live-title" data-i18n="dash.livestream">Live Stream — YOLOv8n VIN Detection</span>
+      <span class="row" style="gap:8px"><span id="camDot" class="status-dot off"></span><span class="sub" id="camStateText">Offline</span></span>
+    </div>
+    <div class="card-body">
+      <div class="plc-bar">
+        <div class="plc-left">
+          <span class="plc-title" data-i18n="dash.plc_control">PLC Control</span>
+          <span class="plc-state"><span id="plcDot" class="status-dot off"></span><span id="plcStateText">—</span></span>
+          <span id="plcMode" class="plc-mode"></span>
+        </div>
+        <div class="plc-actions">
+          <button id="btnPlcOn" class="btn btn-accent btn-sm">● PLC ON (1)</button>
+          <button id="btnPlcOff" class="btn btn-danger btn-sm">■ PLC OFF (0)</button>
+        </div>
+      </div>
+
+      <div class="video-wrap">
+        <div class="video-overlay">
+          <span id="liveBadge" class="live-badge"><span class="dot"></span>LIVE</span>
+          <div class="video-stats">
+            <span class="vs">FPS <b id="vsFps">0</b></span>
+            <span class="vs">DET <b id="vsDet">0</b></span>
+            <span class="vs">VIN <b id="vsVin">—</b></span>
+          </div>
+        </div>
+        <img id="videoFeed" alt="" width="800" height="450" decoding="async">
+        <div id="videoPlaceholder" class="video-placeholder">
+          <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:.5"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+          <div data-i18n-html="dash.cam_off_hint">Camera is off.<br>Press “PLC ON (1)” or wait for a PLC signal.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Statistics -->
+  <div class="chips">
+    <div class="chip"><div class="label" data-i18n="dash.frames">Frames Processed</div><div class="value" id="statFrames">0</div></div>
+    <div class="chip"><div class="label" data-i18n="dash.detections">Detections</div><div class="value" id="statDet">0</div></div>
+    <div class="chip"><div class="label" data-i18n="dash.vin_saved">VIN Saved</div><div class="value" id="statVin">0</div></div>
+    <div class="chip"><div class="label" data-i18n="dash.rfid_reads">RFID Reads</div><div class="value" id="statRfid">0</div></div>
+    <div class="chip"><div class="label" data-i18n="dash.ocr_success">OCR Success</div><div class="value" id="statOcr">0%</div></div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}<script src="/static/js/dashboard.js"></script>{% endblock %}

@@ -1,0 +1,185 @@
+camera:
+  ip: 192.0.2.10
+  cola_port: 2111
+  blob_port: 2113
+  password: CHANGE_ME
+  stale_after_sec: 3
+  max_consecutive_timeouts: 5
+  reconnect_initial_delay_sec: 1
+  reconnect_max_delay_sec: 30
+  reconnect_max_attempts: 0
+plc:
+  enabled: false
+  mode: simulator
+  ip: 192.0.2.20
+  port: 5003
+  plc_type: Q
+  signal_address: D2222
+  trigger_on_value: 1
+  signal_kind: bit
+  signal_bit: 0
+  trigger_mask: 0
+  trigger_mode: pulse
+  camera_delay_sec: 0
+  camera_search_timeout_sec: 30
+  done_address: ''
+  done_value: 1
+  require_zero_before_rearm: true
+  poll_interval_ms: 100
+  reconnect_max_delay_sec: 30
+  full_stop_on_zero: true
+  auto_off_on_vin: true
+  off_delay_sec: 0
+rfid:
+  enabled: false
+  mode: simulator
+  ip_address: 192.0.2.30
+  port: 80
+  timeout: 5
+  read_duration_ms: 700
+  inventory_duration_ms: 6000
+  inventory_retry_duration_ms: 4000
+  inventory_retry_after_ms: 2000
+  warmup_ms: 150
+  username: ''
+  password: ''
+  antenna_ports:
+  - 1
+  - 2
+  - 3
+  - 4
+  tx_power_cdbm: 3150
+  epc_decimal_validate: true
+  epc_decimal_min: 1000
+  epc_decimal_max: 9999
+  sim_epc: ''
+session:
+  timeout_sec: 30
+  hold_until_deadline: true
+  require_rfid: true
+  rfid_grace_sec: 15
+  ocr_inflight_grace_sec: 15
+  # Navbatdagi trigger capture'ni shu muddatdan kech boshlasa, kuzov kamera
+  # oldidan o'tib ketgan hisoblanadi va sessiya MISSED_CAPTURE_WINDOW bilan
+  # yopiladi (kech boshlab NOTO'G'RI kuzovni o'qishdan xavfsizroq).
+  # Production takt vaqti va D2222 sensori-kamera masofasiga qarab sozlang.
+  max_capture_delay_ms: 4000
+detection:
+  conf_threshold: 0.4
+  ocr_trigger_conf: 0.85
+  iou_threshold: 0.45
+  device: cuda:0
+  ocr_confirm_frames: 2
+  ocr_submit_on_exit: true
+  min_crop_quality: 0.45
+  fusion_k: 4
+  collect_enabled: false
+ocr:
+  lang: en
+  use_gpu: true
+  paddle_det: true
+  det_fallback_enabled: false
+  drop_score: 0.3
+  min_confidence: 0.45
+  duplicate_window_sec: 90
+  parallel_engines: 1
+  enable_mkldnn: false
+  cpu_threads: 1
+  worker_task_timeout_sec: 12
+  worker_max_restarts: 50
+  variants_enabled:
+  - raw_resized
+  - clahe_unsharp
+  - blackhat_relief
+  variant_rotations:
+  - 0
+  - -3
+  - 3
+  variant_deskew: true
+  retry_enabled: true
+  max_ocr_attempts: 16
+vin:
+  enabled: true
+  default_model: QY
+  min_final_score: 0.55
+  accept_final_score: 0.8
+  accept_min_crops: 2
+  accept_multi_variant_min: 3
+  accept_risky_margin: 0.2
+  accept_raw_support_ratio: 0.5
+  accept_single_read: false
+  accept_single_min_score: 0.8
+  pos5_min_crops: 2
+  pos5_min_variants: 3
+  pos5_min_margin: 0.2
+  pos5_reject_structure_only: true
+  pos5_structure_rescue_enabled: true
+  pos5_structure_rescue_raw_chars: '38'
+  pos5_structure_rescue_min_score: 0.9
+  pos5_structure_rescue_min_raw_support: 0.85
+  accept_variable_margin: 0.08
+  accept_serial_margin: 0.12
+  exact_conflict_ratio: 0.55
+  exact_rescue_min_conf: 0.74
+  independent_crop_hash_distance: 5
+  struct_bonus_variable: 0.15
+  require_known_model: true
+  enforce_fixed_positions: true
+# v1.2.1 engine-neutral OCR orkestratsiya (docs/v1.2.1/OCR_ENGINE_CONTRACT.md).
+# Standart: faqat legacy PaddleOCR primary. Kelajakdagi engraved engine
+# STANDART BO'YICHA O'CHIRILGAN (shadow/fallback bo'sh) — model tayyor bo'lgach
+# shadow_engine: engraved_sequence qilib yoqiladi, keyin fallback, keyin primary.
+ocr_engines:
+  primary_engine: paddleocr_legacy
+  shadow_engine: ''          # '' = shadow yo'q; keyin: engraved_sequence
+  fallback_engine: ''        # '' = fallback yo'q
+  validation_profile: current_production
+  charset_profile: alphanumeric_36
+  engraved_model_path: ''    # kelajakdagi engraved model (hozir mavjud emas)
+# v1.2.1 OCR release integration. SHADOW is the safe default (engraved = evidence only;
+# legacy Paddle stays the production decision). GUARDED_PRIMARY is available but must be
+# enabled deliberately and only when evaluation gates pass (currently blocked by weak classes).
+ocr_release:
+  release_mode: SHADOW                # SHADOW | GUARDED_PRIMARY | DISABLED
+  engraved_enabled: true
+  engraved_model_dir: models/engraved_ocr_v1.2.1
+  engraved_expected_length: 17
+  paddle_raw_enabled: true
+  paddle_enhanced_enabled: true
+  engine_timeout_ms: 4000
+  store_raw_results: true
+  collection_enabled: true
+  collection_root: runtime/engraved_ocr_collection
+  collection_target_chars: V,G,A,D,H,B,5,6,7,0,2,3
+  weak_classes: 5,6,7,A,B,D,H
+  weak_classes_enabled: false         # weak classes gated to UNKNOWN by default
+pos5_verifier:
+  enabled: false
+  model_path: ''
+  backend: hog_svm
+  min_confidence: 0.6
+  save_char_crops: false
+vin_slot_recognizer:
+  enabled: false
+  mode: shadow
+  model_path: models/vin_slot_recognizer_pilot/best.pt
+  device: auto
+  accept_on_paddle_fail: false
+  min_avg_confidence: 0.8
+  min_char_confidence: 0.35
+  require_paddle_support: true
+  min_paddle_exact_reads: 1
+  agree_bonus: 0.03
+  reject_on_disagree: false
+server:
+  host: 0.0.0.0
+  port: 8080                # 8000 -> 8080 (bosh port). Dashboard: http://<IP>:8080/dashboard
+  mjpeg_fps: 25
+  jpeg_quality: 80
+auth:
+  enabled: true
+  username: admin
+  password: CHANGE_ME
+  session_ttl_sec: 7200
+  max_failed_attempts: 5
+  lockout_seconds: 300

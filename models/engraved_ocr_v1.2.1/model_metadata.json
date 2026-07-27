@@ -1,0 +1,155 @@
+{
+  "model_name": "engraved_ocr_v1.2.1",
+  "arch": "mobilenet_v3_small",
+  "input_size": 64,
+  "input_channels": 3,
+  "charset": "0123456789ABCDEFHJNST",
+  "charset_len": 21,
+  "output_dimension": 22,
+  "reject_index": 21,
+  "reject_outputs": 1,
+  "model_version": "1.2.1",
+  "best_model_sha256": "9d0bd03743bbb839f0cad7a37f73f2c738b5cc56fb28d3939e5e458d68b2df8f",
+  "onnx_status": "ok",
+  "onnx_parity_max_abs_diff": 8e-05,
+  "test": {
+    "count": 155,
+    "accuracy": 0.7419,
+    "balanced_acc": 0.7005,
+    "macro_precision": 0.6772,
+    "macro_recall": 0.7005,
+    "macro_f1": 0.6705,
+    "top1": 0.7419,
+    "top2": 0.8387,
+    "reject_prf": [
+      0.946,
+      0.761,
+      0.843
+    ],
+    "mean_confidence": 0.8837,
+    "cpu_latency_ms": 12.72
+  },
+  "per_class_prf_support": {
+    "0": [
+      0.9,
+      0.857,
+      0.878,
+      21
+    ],
+    "1": [
+      0.143,
+      0.5,
+      0.222,
+      4
+    ],
+    "2": [
+      0.5,
+      0.5,
+      0.5,
+      2
+    ],
+    "3": [
+      0.4,
+      0.667,
+      0.5,
+      3
+    ],
+    "4": [
+      0.75,
+      1.0,
+      0.857,
+      6
+    ],
+    "5": [
+      0,
+      0.0,
+      0,
+      3
+    ],
+    "6": [
+      0.333,
+      0.667,
+      0.444,
+      3
+    ],
+    "7": [
+      0.6,
+      0.6,
+      0.6,
+      5
+    ],
+    "8": [
+      0.625,
+      0.714,
+      0.667,
+      7
+    ],
+    "9": [
+      0.5,
+      0.6,
+      0.545,
+      5
+    ],
+    "B": [
+      0.667,
+      1.0,
+      0.8,
+      4
+    ],
+    "C": [
+      0.714,
+      0.556,
+      0.625,
+      9
+    ],
+    "D": [
+      1.0,
+      1.0,
+      1.0,
+      2
+    ],
+    "E": [
+      1.0,
+      0.667,
+      0.8,
+      6
+    ],
+    "F": [
+      0.8,
+      1.0,
+      0.889,
+      4
+    ],
+    "J": [
+      0.667,
+      0.4,
+      0.5,
+      5
+    ],
+    "N": [
+      1.0,
+      0.833,
+      0.909,
+      6
+    ],
+    "S": [
+      1.0,
+      0.8,
+      0.889,
+      5
+    ],
+    "T": [
+      1.0,
+      0.889,
+      0.941,
+      9
+    ],
+    "REJECT": [
+      0.946,
+      0.761,
+      0.843,
+      46
+    ]
+  },
+  "g_v_policy": "G and V are NOT output classes (22 outputs, no G/V index); the model structurally cannot emit G/V. Real G/V rejection requires collected samples."
+}

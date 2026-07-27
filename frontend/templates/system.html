@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% set active = 'system' %}
+{% set page_title = 'System Status' %}
+{% set page_sub = 'Service health & pipeline architecture' %}
+{% block title %}AI_CAM — System Status{% endblock %}
+
+{% block content %}
+<div class="content">
+
+  <div class="card">
+    <div class="card-head"><span>Backend Services</span><span class="sub" id="svcUpdated">—</span></div>
+    <div class="card-body">
+      <div class="svc-grid">
+        <div class="svc" id="svcPlc"><div class="svc-top"><span class="svc-name">PLC Service</span><span class="status-dot off"></span></div><div class="svc-meta">—</div></div>
+        <div class="svc" id="svcCamera"><div class="svc-top"><span class="svc-name">Camera Service</span><span class="status-dot off"></span></div><div class="svc-meta">—</div></div>
+        <div class="svc" id="svcDetection"><div class="svc-top"><span class="svc-name">Detection (YOLOv8)</span><span class="status-dot off"></span></div><div class="svc-meta">—</div></div>
+        <div class="svc" id="svcOcr"><div class="svc-top"><span class="svc-name">OCR Service</span><span class="status-dot off"></span></div><div class="svc-meta">—</div></div>
+        <div class="svc" id="svcRfid"><div class="svc-top"><span class="svc-name">RFID Service</span><span class="status-dot off"></span></div><div class="svc-meta">—</div></div>
+        <div class="svc" id="svcDatabase"><div class="svc-top"><span class="svc-name">Database Service</span><span class="status-dot off"></span></div><div class="svc-meta">—</div></div>
+        <div class="svc" id="svcLog"><div class="svc-top"><span class="svc-name">Log Service</span><span class="status-dot off"></span></div><div class="svc-meta">—</div></div>
+        <div class="svc" id="svcSettings"><div class="svc-top"><span class="svc-name">Settings Service</span><span class="status-dot off"></span></div><div class="svc-meta">—</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><span>System Architecture</span></div>
+    <div class="card-body">
+      <div class="arch">
+        <div class="node">PLC (MELSEC) — signal = 1</div><div class="arrow"></div>
+        <div class="node">Gateway / Session Manager (90s)</div><div class="arrow"></div>
+        <div class="node">Camera Service (SICK Lector652)</div><div class="arrow"></div>
+        <div class="node">YOLOv8 Detection</div><div class="arrow"></div>
+        <div class="node">OCR Service (PaddleOCR)</div><div class="arrow"></div>
+        <div class="node">VIN Validation (QY / BL7M)</div><div class="arrow"></div>
+        <div class="node">RFID Service (Impinj R700)</div><div class="arrow"></div>
+        <div class="node">Database Service (SQLite)</div><div class="arrow"></div>
+        <div class="node">Dashboard &amp; History</div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}<script src="/static/js/system.js"></script>{% endblock %}
