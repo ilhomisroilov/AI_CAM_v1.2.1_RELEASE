@@ -22,16 +22,16 @@ executed from this dev box — no result is fabricated for them.
 | PLC D2222 (10.123.40.99) | **VERIFY-ON-SERVER** | `/api/plc/status`: running, mode melsec, connected=false (no hardware). D2222 only, no D2223. |
 | RFID R700 (10.123.18.3) | **VERIFY-ON-SERVER** | `/api/rfid/status` 200; service starts, reports disconnected. |
 | API endpoints | **PASS** | `/health /api/status /api/plc/status /api/rfid/status /api/records` all 200 with expected fields. |
-| Dashboard status + polling | **PASS** | Browser: cards populate from `/api/status`; single-owner visibility-aware poller; pause when hidden. |
-| History records | **PASS** | `/api/records` 200; table rendered existing DB record (VIN/RFID/model/confidence/session timing). |
-| Video feed endpoint | **PASS (endpoint)** | `/video_feed` wired; streams only when camera connected (placeholder otherwise). |
-| Browser console errors | **PASS** | Zero console errors on dashboard and history. |
+| Dashboard status + polling | **PASS (real browser)** | Fixed `polling.js` "Illegal invocation" bug (native `setInterval` bound to window); Playwright (visible page) confirms `/api/status`,`/api/plc/status`,`/api/rfid/status` fire → 200 and cards populate. See `reports/P0_FRONTEND_FIX_REPORT.md`. |
+| History records | **PASS (real browser)** | Playwright: `/api/records` fires → 200; table renders the DB record. |
+| Video feed endpoint | **PASS (endpoint)** | `/video_feed` requested only when camera connected (placeholder standby otherwise). |
+| Browser console errors | **PASS (real browser)** | Playwright: 0 console errors, 0 uncaught page errors on dashboard + history. |
 | Static asset freshness | **PASS** | `Cache-Control: no-cache` on `/static` + `?v={app_version}` on key assets. |
 | Database (runtime/data, idempotent) | **PASS** | `runtime/data/ai_cam.db`; migration idempotent (second run adds nothing); existing record preserved. |
 | Crop saving | **PASS (path)** / VERIFY-ON-SERVER (live) | `runtime/crops/` + collector wired + unit-tested; live capture needs camera. |
 | Dataset collection | **PASS (path)** / VERIFY-ON-SERVER (live) | `runtime/engraved_ocr_collection/`; atomic writes, trusted-label only, `collector_retention_days:0`=unlimited. |
 | Restart persistence | **PASS** | DB + crops live under `runtime/`, git-ignored, survive restart; migration never resets. |
-| Full regression tests | **PASS** | `pytest tests/` → **377 passed, 4 skipped, 0 failed** (370 existing + 7 new portable tests). |
+| Full regression tests | **PASS** | `pytest tests/` → **378 passed, 4 skipped, 0 failed** (incl. new real-browser Playwright test + 7 portable tests). |
 
 ## Final decision
 

@@ -62,24 +62,35 @@ under `models/`. No `/opt`, `/etc`, `/var`, or `C:\Users` in the code defaults.
 
 **Config warnings → stderr**, so `--print-config`/`--self-check` emit clean JSON.
 
-## 3. Frontend — API contract root cause
+## 3. Frontend — real root cause (P0)
 
-The frontend in this build was **not** broken: `dashboard.js`/`history.js` already
-use same-origin relative URLs (`/api/status`, `/api/plc/status`, `/api/rfid/status`,
-`/api/records`, `/video_feed`) and a single-owner, visibility-aware `polling.js`
-(pause on hidden, resume + one immediate run on visible, `AbortController`
-non-overlap, cleanup on unload). Live browser smoke (admin/admin → dashboard →
-history) confirmed:
+The frontend **was** broken (corrects an earlier mistaken "already correct"
+finding — see `reports/P0_FRONTEND_FIX_REPORT.md`). On a **visible** page, neither
+the dashboard nor history issued any API request; cards stayed on `—`; three
+uncaught **"Illegal invocation"** errors were thrown.
 
-* all endpoints return `200` with the expected fields;
-* status cards populate from `/api/status` (camera → *Offline* with a reason, AI →
-  *Ready*), never a bare `—` when visible;
-* **zero** console errors; history renders DB records.
+Root cause in `polling.js`: the native `window.setInterval`/`clearInterval` were
+stored as instance properties and invoked as `this.setIntervalFn(...)`, i.e. with
+`this === PollOwner`. Browsers require these to run with `this === window`, so they
+threw inside `_arm()` — which `start()` calls **before** `runNow()` — killing the
+initial request and the interval. It was invisible earlier because (a) `_arm()`
+bails out when the page is hidden, so the in-app **hidden** browser pane never hit
+the line, and (b) the WSH unit harness injects **fake** timers, so the native
+binding was never exercised — hence real-browser testing is mandatory.
 
-The only real gap — **missing asset versioning / cache header** — is fixed (§2).
-PLC simulator buttons are already disabled when `is_simulator` is false (real
-MELSEC). The "stuck on —/Offline" state only occurs while the tab is hidden, which
-is the correct paused behavior.
+Fix: bind the native fallbacks to `window`
+(`root.setInterval.bind(root)` / `root.clearInterval.bind(root)`); test doubles are
+still honoured. `history.js` top-level `addEventListener` wirings were also made
+null-safe so template drift can't throw before the poller is created.
+
+Verified with Playwright (headless, `visibilityState=visible`): `/api/status`,
+`/api/plc/status`, `/api/rfid/status` fire → 200; cards populate (camera *Offline*
+with reason, AI *Ready*); `/api/records` fires → 200 and renders; **0** console and
+**0** page errors. `dashboard.js`/`history.js` already use same-origin relative
+URLs and the single-owner, visibility-aware poller (pause on hidden, resume + one
+immediate run on visible, `AbortController` non-overlap, unload cleanup); PLC
+simulator buttons are disabled when `is_simulator` is false. Asset versioning +
+`no-cache` (§2) close the remaining stale-JS gap.
 
 ## 4. OCR — new engine architecture (GUARDED_PRIMARY)
 

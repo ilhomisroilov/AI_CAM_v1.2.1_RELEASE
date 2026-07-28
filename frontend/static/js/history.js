@@ -131,8 +131,8 @@
     $("imgModalImg").src = src; $("imgCaption").textContent = cap || "";
     $("imgModal").classList.add("show");
   }
-  $("imgClose").addEventListener("click", () => $("imgModal").classList.remove("show"));
-  $("imgModal").addEventListener("click", (e) => { if (e.target.id === "imgModal") $("imgModal").classList.remove("show"); });
+  $("imgClose")?.addEventListener("click", () => $("imgModal")?.classList.remove("show"));
+  $("imgModal")?.addEventListener("click", (e) => { if (e.target.id === "imgModal") $("imgModal").classList.remove("show"); });
 
   // ---- sorting ----
   document.querySelectorAll("th[data-sort]").forEach((th) => {
@@ -147,21 +147,22 @@
   });
 
   // ---- pagination ----
-  $("pgPrev").addEventListener("click", () => { if (page > 1) { page--; renderPage(); } });
-  $("pgNext").addEventListener("click", () => { page++; renderPage(); });
+  $("pgPrev")?.addEventListener("click", () => { if (page > 1) { page--; renderPage(); } });
+  $("pgNext")?.addEventListener("click", () => { page++; renderPage(); });
 
   // ---- filters ----
-  $("btnSearch").addEventListener("click", () => requestLoad(true));
+  $("btnSearch")?.addEventListener("click", () => requestLoad(true));
   ["searchVin", "searchEpc"].forEach((id) => $(id)?.addEventListener("keydown", (e) => { if (e.key === "Enter") requestLoad(true); }));
   ["filterModel", "filterScore", "dateStart", "dateEnd"].forEach((id) => $(id)?.addEventListener("change", () => requestLoad(true)));
-  $("btnClearFilter").addEventListener("click", () => {
+  $("btnClearFilter")?.addEventListener("click", () => {
     ["searchVin", "searchEpc", "dateStart", "dateEnd"].forEach((id) => { if ($(id)) $(id).value = ""; });
-    $("filterModel").value = ""; $("filterScore").value = "0";
+    if ($("filterModel")) $("filterModel").value = "";
+    if ($("filterScore")) $("filterScore").value = "0";
     requestLoad(true);
   });
-  $("btnRefresh").addEventListener("click", () => requestLoad(false));
-  $("btnCsv").addEventListener("click", () => { const p = filterParams(); p.set("fmt", "csv"); window.location = `/api/export?${p}`; });
-  $("btnXlsx").addEventListener("click", () => { const p = filterParams(); p.set("fmt", "xlsx"); window.location = `/api/export?${p}`; });
+  $("btnRefresh")?.addEventListener("click", () => requestLoad(false));
+  $("btnCsv")?.addEventListener("click", () => { const p = filterParams(); p.set("fmt", "csv"); window.location = `/api/export?${p}`; });
+  $("btnXlsx")?.addEventListener("click", () => { const p = filterParams(); p.set("fmt", "xlsx"); window.location = `/api/export?${p}`; });
 
   const historyPoller = window.AICAMPolling.create("history-records", (signal) => {
     const reset = resetOnNextLoad;

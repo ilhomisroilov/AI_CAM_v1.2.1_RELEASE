@@ -13,8 +13,13 @@
     this.task = task;
     this.intervalMs = Math.max(1000, Number(options.intervalMs || 7000));
     this.document = options.document || root.document;
-    this.setIntervalFn = options.setIntervalFn || root.setInterval;
-    this.clearIntervalFn = options.clearIntervalFn || root.clearInterval;
+    // Native timers MUST keep `window` as their receiver — calling
+    // `this.setIntervalFn(...)` on a stored `window.setInterval` reference would
+    // otherwise invoke it with `this === PollOwner` and browsers throw
+    // "Illegal invocation", killing start() before the first poll. Injected test
+    // doubles are used as-is; the native fallbacks are bound to `root`.
+    this.setIntervalFn = options.setIntervalFn || root.setInterval.bind(root);
+    this.clearIntervalFn = options.clearIntervalFn || root.clearInterval.bind(root);
     this.AbortControllerCtor = options.AbortControllerCtor || root.AbortController;
     this.timer = null;
     this.inFlight = false;
