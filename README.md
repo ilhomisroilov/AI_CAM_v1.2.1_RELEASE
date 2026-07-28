@@ -1,13 +1,39 @@
-# AI_CAM v1.2.1
+# AI_CAM v1.3.0 (rc1)
 
-AI_CAM is an industrial VIN capture service with SICK camera, YOLO plate
-detection, PaddleOCR, an Engraved v1.2.1 shadow recognizer, PLC/RFID session
-ownership, a FastAPI dashboard, SQLite traceability and active-learning evidence
-collection.
+AI_CAM is an industrial engraved-VIN capture service for **Station 509**: SICK
+camera + YOLO plate detection, a three-engine OCR stack (ENGRAVED_V121 primary
+candidate, PADDLE_RAW and PADDLE_ENHANCED validators), a Mitsubishi-Q PLC (**D2222**)
++ Impinj R700 RFID body-cycle, a FastAPI dashboard/history, SQLite traceability, and
+active-learning dataset collection. One PLC trigger → one body-cycle → **exactly one**
+database record.
 
-This release is portable and self-contained. Runtime data stays below `runtime/`;
-YOLO, Engraved ONNX and Paddle det/rec/cls models stay below `models/`; no
-user-profile Paddle cache or another AI_CAM checkout is required.
+Portable and self-contained: runtime data under `runtime/`, all models under
+`models/`, no user-profile cache. One command: **`python run.py`**. No `/opt`,
+`/etc`, `/var`, systemd or service-user dependency.
+
+> **v1.3.0-rc1** adds: D2222 forensic edge audit; the production body-cycle
+> invariant (duplicate/early triggers suppressed, no queue); a strict YOLO ≥ 0.90
+> OCR gate; F/E·U/V disagreement audit + weak-position guard; VIN-locked retry
+> cancel; character-alignment that never ships an equal-width split as training
+> data; failure-evidence images; and a real 24h production-observation tool. Final
+> `v1.3.0` is gated on that 24h run on the Ubuntu GPU host.
+
+## Documentation
+- Architecture + diagrams: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- OCR fusion & three engines: [docs/OCR_FUSION.md](docs/OCR_FUSION.md)
+- Dataset character alignment: [docs/DATASET_CHARACTER_ALIGNMENT.md](docs/DATASET_CHARACTER_ALIGNMENT.md)
+- Failure evidence: [docs/FAILURE_EVIDENCE.md](docs/FAILURE_EVIDENCE.md)
+- 24h observation: [docs/PRODUCTION_OBSERVATION.md](docs/PRODUCTION_OBSERVATION.md)
+- PLC & config: [docs/PLC_AND_CONFIG.md](docs/PLC_AND_CONFIG.md) · Run guide: [docs/SIMPLE_RUN_GUIDE.md](docs/SIMPLE_RUN_GUIDE.md)
+- Release notes: [docs/releases/v1.3.0-rc1.md](docs/releases/v1.3.0-rc1.md) · Doc inventory: [docs/DOCUMENTATION_INVENTORY.md](docs/DOCUMENTATION_INVENTORY.md)
+
+## Hardware (Station 509)
+| device | address | notes |
+|--------|---------|-------|
+| PLC (Mitsubishi Q) | `10.123.40.99:5003` | trigger **D2222**=1 (~3 s pulse); D2223 not used |
+| SICK camera | `10.123.86.42` | CoLa `2111`, BLOB `2113` |
+| RFID (Impinj R700) | `10.123.18.3:80` | 30 s parallel scan |
+| GPU | NVIDIA (e.g. GTX 1650) | Torch cu118, Paddle-GPU, YOLO `cuda:0` |
 
 ## Supported runtime
 
