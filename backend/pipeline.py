@@ -161,6 +161,9 @@ class Session:
     ocr_terminal_reason: Optional[str] = None
     last_evidence_signature: Optional[str] = None
     vin_locked: bool = False           # v1.3.0: accepted VIN -> cancel OCR retries
+    best_crop: Optional[object] = None       # v1.3.0: retained best crop for failure evidence
+    best_crop_score: float = 0.0
+    evidence_rel_path: Optional[str] = None  # v1.3.0: saved failure-evidence image path
     stop_event: threading.Event = field(default_factory=threading.Event)
     done_event: threading.Event = field(default_factory=threading.Event)
     watchdog: Optional[threading.Thread] = None
@@ -1440,6 +1443,30 @@ class Pipeline:
         for sid in reversed(keep_open):
             self._session_order.appendleft(sid)
 
+    def _save_failure_evidence(self, session) -> Optional[str]:
+        """Save the best retained crop, else the last decoded frame, as failure
+        evidence — so a decoded-but-no-VIN body-cycle never has an empty image
+        path (v1.3.0 items 10/11). Best-effort; returns the crops-relative path."""
+        img = getattr(session, "best_crop", None)
+        kind = "crop"
+        if img is None:
+            with self._capture_lock:
+                img = self._latest_frame
+            kind = "frame"
+        if img is None:
+            return None
+        try:
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            fname = f"NOVIN_{kind}_{session.session_id}_{ts}.jpg"
+            fpath = Path(CROPS_DIR) / fname
+            if cv2.imwrite(str(fpath), img):
+                session.evidence_rel_path = f"crops/{fname}"
+                self._maybe_cleanup_crops()
+                return session.evidence_rel_path
+        except Exception as exc:
+            log.error(f"[EVIDENCE] failure-evidence saqlanmadi: {exc}")
+        return None
+
     def _finalize_session(self, session_id=None, reason: Optional[str] = None,
                           failure_state: Optional["SessionState"] = None) -> None:
         """
@@ -1495,6 +1522,11 @@ class Pipeline:
         else:
             vin_val = "NO_READ"; conf = 0.0; rel_path = None
             raw_vin = None; model = None
+            # v1.3.0 items 10/11: frames were decoded but no VIN was read — the
+            # evidence path must NOT be empty. Save the best retained crop, else
+            # the last decoded frame, so every decoded-but-failed cycle has an image.
+            if session.frames_decoded > 0:
+                rel_path = self._save_failure_evidence(session)
 
         if not RFID.enabled:
             rfid_epc = None; rfid_raw = None
@@ -2069,6 +2101,12 @@ class Pipeline:
             self._bump_capture_counter("crops_rejected")
         with self._session_lock:
             self._session_best_crop_quality = max(self._session_best_crop_quality, float(score))
+            # v1.3.0 item 10: retain the best crop on the session for failure evidence.
+            _esid = self._capture_owner_id or self._active_session_id
+            _esess = self._sessions.get(_esid) if _esid else None
+            if _esess is not None and (_esess.best_crop is None or float(score) >= _esess.best_crop_score):
+                _esess.best_crop = crop
+                _esess.best_crop_score = float(score)
         self._event_buf.append((crop, score))
         self._event_buf.sort(key=lambda x: x[1], reverse=True)
         del self._event_buf[DETECTION.event_buffer_max:]
