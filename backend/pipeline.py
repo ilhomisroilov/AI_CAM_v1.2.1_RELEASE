@@ -160,6 +160,7 @@ class Session:
     failure_stage: Optional[str] = None
     ocr_terminal_reason: Optional[str] = None
     last_evidence_signature: Optional[str] = None
+    vin_locked: bool = False           # v1.3.0: accepted VIN -> cancel OCR retries
     stop_event: threading.Event = field(default_factory=threading.Event)
     done_event: threading.Event = field(default_factory=threading.Event)
     watchdog: Optional[threading.Thread] = None
@@ -1903,6 +1904,22 @@ class Pipeline:
                      or self._ocr_attempts >= DETECTION.ocr_session_max_triggers)):
                 return False
             if session is not None:
+                # v1.3.0 item 1: STRICT YOLO gate. The best crop quality (best_q)
+                # must NOT substitute for detector confidence — if the session's
+                # peak YOLO confidence is below the gate, no OCR is submitted.
+                min_yolo = float(getattr(DETECTION, "ocr_submit_min_yolo_conf", 0.0) or 0.0)
+                if min_yolo > 0.0 and float(self._session_max_yolo_conf or 0.0) < min_yolo:
+                    log.warning(
+                        f"[OCR GATE] session=#{sid} YOLO conf "
+                        f"{float(self._session_max_yolo_conf or 0.0):.3f} < "
+                        f"ocr_submit_min_yolo_conf {min_yolo:.2f} — OCR submit blocked "
+                        f"(best_q does not override YOLO).")
+                    return False
+                # v1.3.0 item 6: once a VIN is accepted (VIN_LOCKED), cancel all
+                # further OCR retries for this body-cycle — the final VIN is immutable.
+                if getattr(session, "vin_locked", False):
+                    session.ocr_terminal_reason = "VIN_LOCKED"
+                    return False
                 try:
                     conf_hint = float(self._session_max_yolo_conf or 1.0)
                     best_quality = max(
@@ -2227,6 +2244,10 @@ class Pipeline:
                 session.vin_raw = raw_vin
                 session.vin_model = model
                 session.vin_at = time.time()
+                # v1.3.0 item 6: VIN_LOCKED — final VIN is immutable; cancel any
+                # further OCR retry submissions for this body-cycle.
+                session.vin_locked = True
+                session.ocr_terminal_reason = "VIN_LOCKED"
             log.info(f"[VIN] DETECTED (sessiya #{session_id}): VIN={vin} model={model} "
                      f"score={confidence:.2f} xom='{raw_vin}'")
             self._maybe_complete_session(session_id)

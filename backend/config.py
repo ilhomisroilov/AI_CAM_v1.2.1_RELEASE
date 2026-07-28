@@ -125,6 +125,10 @@ class DetectionConfig:
     min_crop_quality: float = 0.45     # eng yaxshi crop sifati shundan past bo'lsa — kutamiz
     event_buffer_max: int = 10         # bitta hodisa uchun saqlanadigan eng yaxshi croplar soni
     fusion_k: int = 3                  # OCR ovoz berishga yuboriladigan top croplar soni
+    # v1.3.0 STRICT OCR-submit gate: best_q (crop sifati) YOLO ishonchini ALMASHTIRMAYDI.
+    # Sessiyaning eng yuqori YOLO ishonchi shu qiymatdan past bo'lsa OCR YUBORILMAYDI.
+    ocr_submit_min_yolo_conf: float = 0.90
+    stable_bbox_iou: float = 0.70      # ketma-ket stabil detection uchun minimal bbox IoU
 
     # --- Avtomatik dataset yig'ish (Data Loop) ---
     collect_enabled: bool = True
