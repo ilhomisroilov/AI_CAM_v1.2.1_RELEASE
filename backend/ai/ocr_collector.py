@@ -25,21 +25,36 @@ def _sha_bytes(b: bytes) -> str:
     return hashlib.sha256(b).hexdigest()
 
 def _adaptive_boxes(gray: np.ndarray, n: int):
+    """Return (boxes, alignment_source). Uses a vertical strokeness projection with
+    valley-snapped cuts (real character alignment). When the projection carries no
+    usable signal it degrades to equal spacing — reported as EQUAL_SPLIT_FALLBACK so
+    such samples can be excluded from training (v1.3.0 items 7/9)."""
     col = np.abs(np.diff(gray, axis=1, prepend=gray[:, :1])).sum(axis=0)
     col = col + np.abs(gray - np.median(gray, axis=0, keepdims=True)).sum(axis=0)
     k = max(3, gray.shape[1] // 120)
     col = np.convolve(col, np.ones(k) / k, mode="same")
     thr = 0.12 * col.max() if col.max() > 0 else 0
     act = np.where(col > thr)[0]
-    x0, x1 = (int(act[0]), int(act[-1]) + 1) if len(act) >= n else (0, len(col))
+    if len(act) >= n:
+        x0, x1 = int(act[0]), int(act[-1]) + 1
+        source = "ADAPTIVE_PROJECTION"
+    else:
+        x0, x1 = 0, len(col)
+        source = "EQUAL_SPLIT_FALLBACK"   # no projection signal -> equal width, not training-ready
     w = max(1, (x1 - x0)) / n
     cuts = [x0]
+    snapped = 0
     for i in range(1, n):
         init = int(x0 + i * w); lo = max(x0 + 1, int(init - 0.45 * w)); hi = min(x1 - 1, int(init + 0.45 * w))
-        cuts.append(lo + int(np.argmin(col[lo:hi])) if hi > lo else init)
+        if hi > lo:
+            cuts.append(lo + int(np.argmin(col[lo:hi]))); snapped += 1
+        else:
+            cuts.append(init)
     cuts.append(x1)
+    if source == "ADAPTIVE_PROJECTION" and snapped == 0:
+        source = "EQUAL_SPLIT_FALLBACK"   # nothing actually snapped to a valley
     H = gray.shape[0]
-    return [(cuts[i], 0, max(1, cuts[i + 1] - cuts[i]), H) for i in range(n)]
+    return [(cuts[i], 0, max(1, cuts[i + 1] - cuts[i]), H) for i in range(n)], source
 
 
 class ActiveLearningCollector:
@@ -115,7 +130,16 @@ class ActiveLearningCollector:
         if gray.ndim == 3:
             gray = gray.mean(axis=2)
         n = max(1, len(per_char) or (len(expected_vin) or 17))
-        boxes = _adaptive_boxes(gray, n)
+        # v1.3.0 item 8: prefer the OCR engine's real per-character segmentation
+        # boxes when supplied (pc["box"]); otherwise adaptive projection alignment.
+        # A pure equal-width split is only ever a flagged, non-training fallback.
+        eng_boxes = [pc.get("box") for pc in per_char]
+        if per_char and all(b is not None for b in eng_boxes):
+            boxes = [tuple(int(v) for v in b) for b in eng_boxes]
+            alignment_source = "ENGRAVED_BOXES"
+        else:
+            boxes, alignment_source = _adaptive_boxes(gray, n)
+        training_ready = alignment_source in ("ENGRAVED_BOXES", "ADAPTIVE_PROJECTION")
         stamp = datetime.now().strftime("%Y-%m-%d")
         sess_dir = os.path.join(self.root, stamp, f"SESSION_{session_id}")
         src_dir = os.path.join(sess_dir, "source"); chars_dir = os.path.join(sess_dir, "chars")
@@ -164,7 +188,10 @@ class ActiveLearningCollector:
                 "source_frame_path": frame_path, "normalized_line_path": line_path,
                 "character_crop_path": crop_path, "crop_box_json": json.dumps({"x":x,"y":y,"w":w,"h":h}),
                 "source_hash": src_hash, "crop_hash": crop_hash,
-                "label_status": label_status, "review_status": "PENDING",
+                "label_status": label_status,
+                "review_status": "PENDING" if training_ready else "PENDING_REVIEW",
+                "alignment_source": alignment_source,
+                "training_eligible": bool(training_ready and label_status == "TRUSTED_LABEL"),
                 "model_version": self.model_version,
                 "created_at": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
             }
@@ -180,6 +207,9 @@ class ActiveLearningCollector:
                                        "reasons": sorted(trig), "crop": os.path.basename(crop_path)})
         json.dump({"session_id": session_id, "expected_vin": expected_vin if trusted else None,
                    "trusted": trusted, "model_version": self.model_version,
+                   "alignment_source": alignment_source,
+                   "training_eligible": bool(training_ready and trusted),
+                   "review_status": "PENDING" if training_ready else "PENDING_REVIEW",
                    "positions": meta_positions,
                    "created_at": datetime.now().strftime("%Y-%m-%dT%H:%M:%S")},
                   open(os.path.join(sess_dir, "metadata.json"), "w"), indent=2)
