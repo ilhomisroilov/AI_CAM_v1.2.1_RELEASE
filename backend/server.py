@@ -141,8 +141,20 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="AI_CAM — Industrial VIN Vision", version=API_VERSION, lifespan=lifespan)
 
-# Statik fayllar va shablonlar
-app.mount("/static", StaticFiles(directory=str(_FRONTEND / "static")), name="static")
+# Statik fayllar va shablonlar.
+# Automatic asset-freshness: every static response carries `Cache-Control: no-cache`
+# so the browser ALWAYS revalidates (StaticFiles already sends ETag + Last-Modified,
+# so unchanged files return a cheap 304). Combined with the `?v={app_version}` query
+# on the tags below, a new release can NEVER be served stale JS/CSS from cache.
+class RevalidatingStaticFiles(StaticFiles):
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
+app.mount("/static", RevalidatingStaticFiles(directory=str(_FRONTEND / "static")),
+          name="static")
 templates = Jinja2Templates(directory=str(_FRONTEND / "templates"))
 templates.env.globals["app_version"] = APP_VERSION
 

@@ -82,11 +82,13 @@ def test_real_mode_reports_every_required_missing_secret(monkeypatch):
     monkeypatch.setattr(config.RFID, "password", "")
     monkeypatch.setattr(config.AUTH, "enabled", True)
     monkeypatch.setattr(config.AUTH, "password", "CHANGE_ME")
+    # Portable model: warnings are human-readable and reference config/settings.yaml
+    # fields (NOT env-var names). They are advisory only — startup never blocks.
     missing = config.validate_required_secrets()
-    assert "AI_CAM_CAMERA_PASSWORD" in missing
-    assert "AI_CAM_RFID_USERNAME" in missing
-    assert "AI_CAM_RFID_PASSWORD" in missing
-    assert any("AI_CAM_ADMIN_PASSWORD" in item for item in missing)
+    assert any("camera.password" in item for item in missing)
+    assert any("rfid.username" in item for item in missing)
+    assert any("rfid.password" in item for item in missing)
+    assert any("auth.password" in item for item in missing)
 
 
 def test_linux_path_and_environment_overrides(tmp_path):

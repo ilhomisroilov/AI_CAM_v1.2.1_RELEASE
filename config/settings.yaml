@@ -1,11 +1,17 @@
-# AI_CAM v1.2.1 production structure.
-# Non-secret line settings are version controlled. Secrets are expanded from
-# /etc/ai-cam/ai-cam.env (systemd EnvironmentFile) and never belong in Git.
+# AI_CAM v1.2.1 — CANONICAL configuration (single source of truth).
+# This one file holds every deployment setting: hardware IP/ports, server/admin
+# login, GPU/CPU mode, model paths and runtime tuning. Copy the project to any
+# folder and run `python run.py` — no /etc, no systemd required.
+#
+# Secrets (${AI_CAM_*}) are auto-loaded at startup from deploy/local/ai-cam.env
+# (git-ignored) if present, or from real environment variables. Both are OPTIONAL
+# overrides — their absence prints a warning and never stops startup.
 camera:
   ip: 10.123.86.42
   cola_port: 2111
   blob_port: 2113
   blob_autodetect: false
+  # Auto-loaded from deploy/local/ai-cam.env (or env override) at startup.
   password: ${AI_CAM_CAMERA_PASSWORD}
   recv_timeout: 3.0
   reconnect_delay: 2.0
@@ -176,7 +182,11 @@ ocr_engines:
   engraved_model_path: ''
 
 ocr_release:
-  release_mode: SHADOW
+  # GUARDED_PRIMARY: ENGRAVED_V121 is the primary VIN candidate; Paddle RAW +
+  # Enhanced act as independent validators/fallback. All guards (confidence,
+  # supported charset, 17-char, segmentation, weak-class, disagreement) apply —
+  # unseen/weak characters are never invented (returned as UNKNOWN_CHAR).
+  release_mode: GUARDED_PRIMARY
   engraved_enabled: true
   engraved_model_dir: models/engraved_ocr_v1.2.1
   engraved_expected_length: 17
@@ -218,10 +228,12 @@ server:
 
 auth:
   enabled: true
+  # LAN default web login is admin/admin (never blocks startup — warning only).
+  # For a stronger password set AI_CAM_ADMIN_PASSWORD in the environment.
   username: admin
-  password: ${AI_CAM_ADMIN_PASSWORD}
+  password: admin
   operator_username: ''
-  operator_password: ${AI_CAM_AUTH_OPERATOR_PASSWORD}
+  operator_password: ''
   session_ttl_sec: 7200
   max_failed_attempts: 5
   lockout_seconds: 300

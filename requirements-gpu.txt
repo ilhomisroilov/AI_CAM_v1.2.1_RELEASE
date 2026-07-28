@@ -1,0 +1,15 @@
+# AI_CAM v1.2.1 — GPU (NVIDIA / CUDA) runtime profile.
+# Ubuntu Server 26.04 · CPython 3.11 · CUDA 11.8.
+#
+# Installs the tested GPU engine stack (Torch 2.4.1+cu118, PaddlePaddle-GPU 2.6.x,
+# PaddleOCR, Ultralytics/YOLO on cuda:0). Run it ON THE GPU HOST, AFTER the base:
+#     pip install -r requirements.txt
+#     pip install -r requirements-gpu.txt
+#     python run.py
+#
+# Windows / CPU-only dev boxes do NOT need this file — requirements.txt already
+# provides a deterministic CPU runtime and run.py auto-falls back to CPU.
+#
+# This reuses the fully pinned, tested Ubuntu manifest so the GPU profile stays a
+# single source of truth.
+-r requirements-linux.txt

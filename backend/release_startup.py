@@ -458,14 +458,24 @@ def run_dry_run() -> dict[str, Any]:
 
 
 def prepare_normal_startup() -> dict[str, Any]:
-    missing_secrets = validate_required_secrets()
-    if missing_secrets:
-        raise StartupGateError(
-            "real hardware mode requires secrets from "
-            "/etc/ai-cam/ai-cam.env: " + ", ".join(missing_secrets)
-        )
     report = run_self_check(deep=False, require_gpu=False)
     report["mode"] = "normal-startup"
+    # Credentials are read from config/settings.yaml (canonical, single source).
+    # Empty/placeholder secrets are a clear WARNING — never a fatal gate. The app
+    # still starts so the dashboard and every non-credential service stay available;
+    # hardware that needs a credential simply reports "disconnected" until
+    # settings.yaml is filled in. Environment variables remain an OPTIONAL override;
+    # their absence never stops startup (no /etc/ai-cam/ai-cam.env dependency).
+    credential_warnings = validate_required_secrets()
+    report["credential_warnings"] = credential_warnings
+    if credential_warnings:
+        print(
+            "[AI_CAM CONFIG] Diqqat — quyidagi credential(lar) bo'sh yoki placeholder; "
+            "config/settings.yaml da to'ldiring (startup davom etadi):",
+            file=sys.stderr,
+        )
+        for item in credential_warnings:
+            print(f"  - {item}", file=sys.stderr)
     report["database"] = prepare_database(DB_PATH)
     report["ok"] = True
     report["startup_report"] = str(_write_report("startup_report.json", report))

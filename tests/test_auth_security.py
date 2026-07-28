@@ -30,7 +30,10 @@ from conftest import login
 # ===================================================================
 # 1-4: Production-mode default-credential blocker
 # ===================================================================
-def test_default_credentials_refused_in_production_mode(monkeypatch):
+def test_default_credentials_allowed_but_warned_in_production_mode(monkeypatch):
+    # Portable-runtime policy (refactor/portable-one-command-runtime): the
+    # admin/admin LAN default must NEVER block startup. Even in production mode it
+    # warns instead of raising, so `python run.py` always comes up.
     monkeypatch.setattr(config_mod.PLC, "mode", "melsec")
     monkeypatch.setattr(config_mod.RFID, "mode", "simulator")
     monkeypatch.setattr(config_mod.AUTH, "enabled", True)
@@ -38,11 +41,8 @@ def test_default_credentials_refused_in_production_mode(monkeypatch):
     monkeypatch.setattr(config_mod.AUTH, "password", "admin")
 
     assert config_mod.is_production_mode() is True
-    try:
-        auth_mod.enforce_startup_security_policy()
-        assert False, "Production + admin/admin startup REFUSED bo'lishi kerak edi"
-    except auth_mod.InsecureDefaultCredentialsError as exc:
-        assert "admin/admin" in str(exc)
+    # must NOT raise — advisory warning only
+    auth_mod.enforce_startup_security_policy()
 
 
 def test_default_credentials_allowed_in_simulator_mode(monkeypatch):

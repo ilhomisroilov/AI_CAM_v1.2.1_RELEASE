@@ -653,11 +653,78 @@ def _read_yaml(path: Path, *, required: bool) -> dict:
         return {}
 
 
+# Optional local secrets. Hardware credentials may be auto-loaded from a
+# git-ignored env file so a fresh copy runs with one `python run.py` and no manual
+# `export` or systemd EnvironmentFile. ONLY these credential keys are honoured;
+# path-root variables (AI_CAM_PROJECT_ROOT / _DATA_ROOT / _LOG_ROOT / _CONFIG,
+# PADDLE_HOME ...) in the file are intentionally IGNORED so runtime paths stay
+# project-relative and portable. Real environment variables always win. An absent
+# file is not an error. Admin web password is NOT auto-loaded (settings.yaml keeps
+# the admin/admin LAN default; export AI_CAM_ADMIN_PASSWORD to override).
+_AUTOLOAD_SECRET_KEYS = (
+    "AI_CAM_CAMERA_PASSWORD",
+    "AI_CAM_RFID_USERNAME",
+    "AI_CAM_RFID_PASSWORD",
+    "AI_CAM_AUTH_OPERATOR_USERNAME",
+    "AI_CAM_AUTH_OPERATOR_PASSWORD",
+)
+AUTOLOADED_SECRETS: list[str] = []
+
+
+def _local_secret_files() -> list[Path]:
+    candidates: list[Path] = []
+    explicit = os.environ.get("AI_CAM_ENV_FILE", "").strip()
+    if explicit:
+        candidates.append(Path(explicit).expanduser())
+    candidates.extend([
+        PROJECT_ROOT / "deploy" / "local" / "ai-cam.env",
+        PROJECT_ROOT / "config" / "credentials.local.env",
+        PROJECT_ROOT / ".env",
+    ])
+    return candidates
+
+
+def _parse_env_file(path: Path) -> dict:
+    parsed: dict = {}
+    try:
+        for raw in path.read_text(encoding="utf-8").splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            if line.lower().startswith("export "):
+                line = line[7:].lstrip()
+            key, _, value = line.partition("=")
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+            if key:
+                parsed[key] = value
+    except Exception:
+        return {}
+    return parsed
+
+
+def autoload_local_secrets() -> list[str]:
+    """Load whitelisted credential vars from the first existing git-ignored local
+    env file into os.environ (only when not already set). Returns names loaded."""
+    AUTOLOADED_SECRETS.clear()
+    for path in _local_secret_files():
+        if not path.is_file():
+            continue
+        data = _parse_env_file(path)
+        for key in _AUTOLOAD_SECRET_KEYS:
+            if data.get(key) and not os.environ.get(key):
+                os.environ[key] = data[key]
+                AUTOLOADED_SECRETS.append(key)
+        break  # first existing file wins
+    return list(AUTOLOADED_SECRETS)
+
+
 def _load_yaml_settings() -> dict:
     """Load tracked production structure, then merge an optional host override."""
     CONFIG_SOURCES.clear()
     CONFIG_LOAD_ERRORS.clear()
     MISSING_ENV_REFERENCES.clear()
+    autoload_local_secrets()
     base = _read_yaml(BASE_SETTINGS_PATH, required=True)
     effective = base
     if SETTINGS_PATH.resolve() != BASE_SETTINGS_PATH.resolve():
@@ -892,9 +959,10 @@ def apply_settings() -> dict:
     issues += validate_config()
     issues += CONFIG_LOAD_ERRORS
     if issues:
-        print("[config] OGOHLANTIRISH — konfiguratsiya muammolari:")
+        # stderr — stdout is reserved for machine-readable JSON (--print-config etc.)
+        print("[config] OGOHLANTIRISH — konfiguratsiya muammolari:", file=sys.stderr)
         for it in issues:
-            print(f"  - {it}")
+            print(f"  - {it}", file=sys.stderr)
     return cfg
 
 
@@ -938,20 +1006,25 @@ def _missing_secret(value: object) -> bool:
 
 
 def validate_required_secrets() -> list[str]:
-    """Return fatal credential omissions for an enabled real-device profile."""
-    if not is_production_mode():
-        return []
-    missing = []
-    if _missing_secret(CAMERA.password):
-        missing.append("AI_CAM_CAMERA_PASSWORD")
-    if RFID.enabled and str(RFID.mode).lower() == "r700":
-        if _missing_secret(RFID.username):
-            missing.append("AI_CAM_RFID_USERNAME")
-        if _missing_secret(RFID.password):
-            missing.append("AI_CAM_RFID_PASSWORD")
+    """Return human-readable credential WARNINGS (never fatal) for a real-device
+    profile. Callers only warn: the app always starts. Hardware that needs an empty
+    credential reports "disconnected" until config/settings.yaml is filled in."""
+    warnings: list[str] = []
+    if is_production_mode():
+        if _missing_secret(CAMERA.password):
+            warnings.append("camera.password bo'sh/placeholder (config/settings.yaml)")
+        if RFID.enabled and str(RFID.mode).lower() == "r700":
+            if _missing_secret(RFID.username):
+                warnings.append("rfid.username bo'sh/placeholder (config/settings.yaml)")
+            if _missing_secret(RFID.password):
+                warnings.append("rfid.password bo'sh/placeholder (config/settings.yaml)")
+    # admin/admin is an accepted LAN default now — warn only, never block startup.
     if AUTH.enabled and _missing_secret(AUTH.password):
-        missing.append("AI_CAM_ADMIN_PASSWORD (or AI_CAM_AUTH_PASSWORD)")
-    return missing
+        warnings.append(
+            "auth.password 'admin' (LAN default) — kuchli parol tavsiya etiladi "
+            "(config/settings.yaml auth.password)"
+        )
+    return warnings
 
 
 def effective_config(*, redact: bool = True) -> dict:

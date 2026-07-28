@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}AI_CAM — VIN Vision{% endblock %}</title>
-  <link rel="stylesheet" href="/static/css/style.css">
-  <script src="/static/js/theme.js"></script>
-  <script src="/static/js/i18n.js"></script>
+  <link rel="stylesheet" href="/static/css/style.css?v={{ app_version }}">
+  <script src="/static/js/theme.js?v={{ app_version }}"></script>
+  <script src="/static/js/i18n.js?v={{ app_version }}"></script>
 </head>
 <body>
 <button class="mobile-burger" id="mobileBurger" aria-label="Menu" title="Menu">
@@ -112,8 +112,8 @@
   </div>
 </div>
 
-<script src="/static/js/app.js"></script>
-<script src="/static/js/polling.js"></script>
+<script src="/static/js/app.js?v={{ app_version }}"></script>
+<script src="/static/js/polling.js?v={{ app_version }}"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

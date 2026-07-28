@@ -23,7 +23,7 @@ import threading
 import time
 from typing import Dict, Optional, Tuple
 
-from .config import AUTH, is_production_mode
+from .config import AUTH
 from .logger import log
 
 # token -> expiry/CSRF/role/username. Authorization state is server-side.
@@ -40,14 +40,18 @@ class InsecureDefaultCredentialsError(RuntimeError):
 
 
 def enforce_startup_security_policy() -> None:
-    """Productionda hammaga ma'lum admin/admin credentialini qat'iy rad etadi."""
+    """Portable-runtime policy: the admin/admin LAN default is ALLOWED but flagged.
+    This is a WARNING, never a fatal gate — the factory-LAN app must always start
+    with a single `python run.py`. Set a stronger credential via
+    config/settings.yaml `auth.password` or the AI_CAM_AUTH_PASSWORD env override."""
     insecure = {"", "admin", "change_me", "changeme", "password"}
-    if (AUTH.enabled and is_production_mode()
-            and str(AUTH.password).strip().lower() in insecure):
-        raise InsecureDefaultCredentialsError(
-            "Production rejimida admin/admin yoki boshqa bo'sh/default auth "
-            "paroli taqiqlangan; "
-            "AI_CAM_AUTH_PASSWORD orqali kuchli credential bering.")
+    if AUTH.enabled and str(AUTH.password).strip().lower() in insecure:
+        log.warning(
+            "[AUTH] default/placeholder web parol ('%s') ishlatilmoqda — LAN default. "
+            "Kuchliroq parol uchun config/settings.yaml auth.password yoki "
+            "AI_CAM_AUTH_PASSWORD ni sozlang.",
+            AUTH.username,
+        )
 
 
 def reset_rate_limit_state() -> None:
