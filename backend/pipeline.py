@@ -261,6 +261,11 @@ class Pipeline:
         self._trigger_sequence = 0
         self._pending_triggers: deque = deque()
         self._dropped_trigger_count = 0
+        # v1.3.0: production body-cycle invariant. Triggers arriving during an
+        # active cycle (or sooner than the minimum body interval) are duplicates
+        # / bounce / external pulses — suppressed, not queued, and audited.
+        self._suppressed_trigger_count = 0
+        self._last_accepted_trigger_mono: Optional[float] = None
         self._metrics = {
             "late_ocr_results_total": 0,
             "late_rfid_results_total": 0,
@@ -759,13 +764,31 @@ class Pipeline:
                 return
         except OSError as exc:
             log.warning(f"[DISK] Trigger-time free-space check failed: {exc}")
+        queue_enabled = bool(getattr(SESSION, "pending_trigger_queue_enabled", False))
+        min_interval = float(getattr(SESSION, "minimum_body_interval_sec", 0.0) or 0.0)
         with self._session_lock:
             self._trigger_sequence += 1
             seq = self._trigger_sequence
             triggered_at = time.time()
+            now_mono = time.monotonic()
             owner = (self._sessions.get(self._capture_owner_id)
                      if self._capture_owner_id else None)
-            if owner is not None and owner.state not in _TERMINAL_SESSION_STATES:
+            active = owner is not None and owner.state not in _TERMINAL_SESSION_STATES
+            if active:
+                if not queue_enabled:
+                    # PRODUCTION: real bodies are >= minimum_body_interval apart, so a
+                    # trigger during an active cycle is a duplicate/bounce/external
+                    # pulse. Suppress + audit; do NOT open a second session/record.
+                    self._suppressed_trigger_count += 1
+                    self._audit_suppressed_trigger(
+                        seq, triggered_at, "DUPLICATE_TRIGGER_IGNORED",
+                        "ACTIVE_BODY_CYCLE", owner.session_id)
+                    log.warning(
+                        f"[PLC] Trigger #{seq} DUPLICATE_TRIGGER_IGNORED "
+                        f"(reason=ACTIVE_BODY_CYCLE, kamera #{owner.session_id} band; "
+                        f"suppressed_trigger_count={self._suppressed_trigger_count}).")
+                    return
+                # SIMULATOR/TEST queue mode (opt-in): bounded FIFO, never silent-drop.
                 if len(self._pending_triggers) >= int(SESSION.max_pending_triggers):
                     self._dropped_trigger_count += 1
                     log.critical(
@@ -780,7 +803,46 @@ class Pipeline:
                             f"{owner.session_id} sessiyasida band) — navbat uzunligi="
                             f"{len(self._pending_triggers)}.")
                 return
+            # Not active. PRODUCTION: reject an implausibly-early re-trigger.
+            if (not queue_enabled and min_interval > 0.0
+                    and self._last_accepted_trigger_mono is not None
+                    and (now_mono - self._last_accepted_trigger_mono) < min_interval):
+                gap = now_mono - self._last_accepted_trigger_mono
+                self._suppressed_trigger_count += 1
+                self._audit_suppressed_trigger(
+                    seq, triggered_at, "SUSPICIOUS_EARLY_TRIGGER",
+                    f"interval {gap:.1f}s < minimum_body_interval {min_interval:.0f}s", None)
+                log.warning(
+                    f"[PLC] Trigger #{seq} SUSPICIOUS_EARLY_TRIGGER "
+                    f"(gap {gap:.1f}s < {min_interval:.0f}s; "
+                    f"suppressed_trigger_count={self._suppressed_trigger_count}).")
+                return
+            self._last_accepted_trigger_mono = now_mono
         self._start_session(seq, triggered_at)
+
+    def _audit_suppressed_trigger(self, seq: int, triggered_at: float,
+                                  decision: str, reason: str,
+                                  active_session_id: Optional[str]) -> None:
+        """Append a suppressed-trigger forensic row (best-effort, never blocks)."""
+        try:
+            from .config import RUNTIME_DIR
+            from datetime import datetime
+            import json as _json
+            adir = Path(RUNTIME_DIR) / "audit"
+            adir.mkdir(parents=True, exist_ok=True)
+            day = datetime.now().strftime("%Y%m%d")
+            row = {
+                "wall_clock": datetime.fromtimestamp(triggered_at).isoformat(timespec="milliseconds"),
+                "trigger_sequence": seq,
+                "decision": decision,
+                "reason": reason,
+                "active_session_id": active_session_id,
+                "suppressed_trigger_count": self._suppressed_trigger_count,
+            }
+            with (adir / f"suppressed_triggers_{day}.jsonl").open("a", encoding="utf-8") as f:
+                f.write(_json.dumps(row, ensure_ascii=False) + "\n")
+        except Exception:
+            pass
 
     def _start_session(self, trigger_sequence: int, triggered_at: float) -> None:
         """Yangi Session ni yaratadi va kamera+RFID+watchdog ni ishga tushiradi."""
@@ -2338,6 +2400,7 @@ class Pipeline:
                 "open_result_sessions": len(open_result_sessions),
                 "trigger_queue_depth": len(self._pending_triggers),
                 "dropped_trigger_count": self._dropped_trigger_count,
+                "suppressed_trigger_count": self._suppressed_trigger_count,
                 "last_failure_stage": (last_finalized.failure_stage
                                        if last_finalized is not None else None),
             }

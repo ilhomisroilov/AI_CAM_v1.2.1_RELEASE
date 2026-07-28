@@ -51,6 +51,14 @@ plc:
   require_zero_before_rearm: true
   poll_interval_ms: 100
   reconnect_max_delay_sec: 30
+  # v1.3.0 D2222 forensic debounce + pulse-width audit (runtime/audit/plc_edges_*).
+  # 200ms stable-high required before a cycle starts (filters short noise pulses);
+  # falling-edge width outside [min,max] is audited as INVALID_PLC_PULSE.
+  plc_edge_audit_enabled: true
+  debounce_on_ms: 200
+  debounce_off_ms: 200
+  expected_pulse_min_ms: 2000
+  expected_pulse_max_ms: 4500
   full_stop_on_zero: true
   auto_off_on_vin: true
   off_delay_sec: 0
@@ -85,6 +93,14 @@ session:
   ocr_inflight_grace_sec: 15
   max_pending_triggers: 10
   overflow_policy: reject_with_alarm
+  # v1.3.0 body-cycle invariant (1 body = 1 cycle = 1 DB record).
+  # Production: real bodies are >= 90s apart, so a trigger during an active cycle
+  # (or sooner than minimum_body_interval_sec) is a duplicate/bounce/external
+  # pulse -> ignored + audited, NOT queued. Set pending_trigger_queue_enabled=true
+  # ONLY for the simulator/test bench.
+  pending_trigger_queue_enabled: false
+  minimum_body_interval_sec: 90
+  same_vin_dedup_sec: 180
   max_capture_delay_ms: 4000
   exit_signal_enabled: false
   post_exit_grace_ms: 2500

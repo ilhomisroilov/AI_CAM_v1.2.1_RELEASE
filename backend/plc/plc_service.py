@@ -228,6 +228,16 @@ class PLCService:
         self._last_signal = value
         state = self._compute_trigger_state(value)
 
+        # v1.3.0 forensic edge audit (additive, best-effort — never blocks polling).
+        if bool(getattr(PLC, "plc_edge_audit_enabled", True)):
+            try:
+                if getattr(self, "_edge_auditor", None) is None:
+                    from .edge_audit import from_config
+                    self._edge_auditor = from_config()
+                self._edge_auditor.feed(state)
+            except Exception:
+                pass
+
         if not self._first_poll_done:
             self._first_poll_done = True
             if state and str(getattr(

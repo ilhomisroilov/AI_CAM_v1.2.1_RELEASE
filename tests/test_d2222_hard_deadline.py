@@ -40,6 +40,8 @@ def _bare_pipeline() -> Pipeline:
     p._session_done = threading.Event()
     p._session_watchdog = None
     p._session_start_ts = 0.0
+    p._suppressed_trigger_count = 0          # v1.3.0 trigger-suppression counter
+    p._last_accepted_trigger_mono = None     # v1.3.0 minimum-body-interval gate
     p._rfid_grace_applied = False
     p._ocr_attempts = 0
     p._dropped_triggers = 0

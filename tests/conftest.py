@@ -167,6 +167,12 @@ def pipeline_instance(tmp_db, monkeypatch):
     """
     from backend.pipeline import Pipeline
     monkeypatch.setattr(cfg.RFID, "enabled", False)
+    # v1.3.0: the harness simulates rapid multi-body sequences (triggers ~0s
+    # apart), i.e. the opt-in SIMULATOR/TEST queue mode. Production (real
+    # settings.yaml) ignores duplicate/early triggers during an active cycle;
+    # the dedicated reliability tests (test_session_reliability_v13) opt back out.
+    monkeypatch.setattr(cfg.SESSION, "pending_trigger_queue_enabled", True)
+    monkeypatch.setattr(cfg.SESSION, "minimum_body_interval_sec", 0.0)
     p = Pipeline()
     monkeypatch.setattr(p, "connect_camera", lambda ip=None: True)
     monkeypatch.setattr(p, "disconnect_camera", lambda: None)

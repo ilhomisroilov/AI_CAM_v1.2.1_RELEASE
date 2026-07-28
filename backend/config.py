@@ -438,6 +438,16 @@ class PLCConfig:
     # Kechikishni yoqish uchun shu qiymatni > 0 qiling (masalan 1.5).
     off_delay_sec: float = 0.0
 
+    # --- v1.3.0 D2222 forensic debounce + pulse-width audit ---
+    # Rising edge faqat raw signal shu vaqt STABIL high bo'lsagina cycle boshlaydi;
+    # 100 ms noise pulse filtrlanadi. Falling'da pulse width o'lchanadi va
+    # [min,max] tashqarisidagi kenglik INVALID_PLC_PULSE deb audit qilinadi.
+    plc_edge_audit_enabled: bool = True
+    debounce_on_ms: float = 200.0
+    debounce_off_ms: float = 200.0
+    expected_pulse_min_ms: float = 2000.0
+    expected_pulse_max_ms: float = 4500.0
+
 
 @dataclass
 class SessionConfig:
@@ -459,8 +469,22 @@ class SessionConfig:
     # uchun FAQAT in-flight jobga beriladigan cheklangan qo'shimcha oyna.
     ocr_inflight_grace_sec: float = 15.0
 
+    # --- v1.3.0 body-cycle invariant: 1 body = 1 cycle = 1 DB record ---
+    # Factory takt: ikki HAQIQIY kuzov orasida kamida 90 s bor. Shundan kamroq
+    # oraliqda kelgan rising edge SUSPICIOUS_EARLY_TRIGGER (yangi session ochmaydi,
+    # audit qilinadi). Faol cycle paytidagi trigger DUPLICATE_TRIGGER_IGNORED.
+    minimum_body_interval_sec: float = 90.0
+    # Production: navbat YO'Q — faol cycle paytidagi trigger e'tiborsiz qoldiriladi
+    # (queue'ga qo'yilmaydi). Faqat simulator/test rejimida True qilib navbatni
+    # tiklash mumkin.
+    pending_trigger_queue_enabled: bool = False
+    # Oxirgi accepted VIN 180 s ichida qayta chiqsa yangi production record yozilmaydi
+    # (DUPLICATE_VIN_SUPPRESSED audit). 0 = o'chirilgan.
+    same_vin_dedup_sec: float = 180.0
+
     # Faol sessiya paytida kelgan D2222 triggerlar yo'qolmasligi uchun
-    # bounded FIFO. Navbat to'lsa yangi trigger aniq alarm bilan rad etiladi.
+    # bounded FIFO (FAQAT pending_trigger_queue_enabled=True bo'lganda ishlatiladi).
+    # Navbat to'lsa yangi trigger aniq alarm bilan rad etiladi.
     max_pending_triggers: int = 10
     overflow_policy: str = "reject_with_alarm"
     # Navbatdagi trigger capture'ni shu muddatdan kech boshlasa, kuzov kamera
