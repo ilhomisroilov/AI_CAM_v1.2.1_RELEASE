@@ -1,0 +1,12 @@
+/var/log/ai-cam/*.log {
+    daily
+    rotate 14
+    size 50M
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+    su aicam aicam
+    create 0640 aicam aicam
+}

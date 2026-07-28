@@ -14,6 +14,13 @@ from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
 
+def _process_is_alive(process) -> bool:
+    try:
+        return bool(process.is_running() and process.status() != "zombie")
+    except Exception:
+        return False
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -34,13 +41,17 @@ def main() -> int:
 
     launcher = args.launcher.resolve()
     is_python = launcher.name.lower().startswith("python")
-    command = [str(launcher), "run.py"] if is_python else [str(launcher)]
+    command = (
+        [str(launcher), "run.py", "--no-hardware"]
+        if is_python else [str(launcher), "--no-hardware"]
+    )
     env = os.environ.copy()
     env.update(
         {
             "AI_CAM_AUTH_PASSWORD": "Local-Smoke-Only-v1.2.1!",
             "AI_CAM_PLC_ENABLED": "0",
             "AI_CAM_RFID_ENABLED": "0",
+            "AI_CAM_SERVER_PORT": str(args.port),
         }
     )
     args.log.parent.mkdir(parents=True, exist_ok=True)
@@ -56,6 +67,7 @@ def main() -> int:
             stdout=output,
             stderr=subprocess.STDOUT,
             creationflags=creationflags,
+            start_new_session=(os.name != "nt"),
         )
         health = None
         deadline = time.monotonic() + args.timeout
@@ -77,13 +89,34 @@ def main() -> int:
             if not health or health.get("status") != "ok":
                 raise RuntimeError(f"health check did not become ready: {health!r}")
 
+            child_processes = []
+            try:
+                import psutil
+
+                child_processes = psutil.Process(proc.pid).children(recursive=True)
+            except Exception:
+                pass
             if os.name == "nt":
                 proc.send_signal(signal.CTRL_BREAK_EVENT)
             else:
-                proc.send_signal(signal.SIGINT)
+                os.killpg(proc.pid, signal.SIGTERM)
             code = proc.wait(timeout=30)
             if code != 0:
                 raise RuntimeError(f"graceful server exit returned {code}")
+            child_deadline = time.monotonic() + 10.0
+            remaining_children = child_processes
+            while remaining_children and time.monotonic() < child_deadline:
+                remaining_children = [
+                    child for child in remaining_children
+                    if _process_is_alive(child)
+                ]
+                if remaining_children:
+                    time.sleep(0.1)
+            if remaining_children:
+                raise RuntimeError(
+                    "orphan child process(es) after graceful exit: "
+                    + ", ".join(str(child.pid) for child in remaining_children)
+                )
         except Exception:
             if proc.poll() is None:
                 proc.terminate()
@@ -101,6 +134,8 @@ def main() -> int:
                 "command": command,
                 "health": health.get("status"),
                 "exit_code": code,
+                "child_processes_observed": len(child_processes),
+                "orphan_child_processes": 0,
                 "log": str(args.log.resolve()),
             },
             indent=2,

@@ -8,26 +8,37 @@ faqat shu faylni tahrirlash kifoya (IP, portlar, chegaralar).
 from __future__ import annotations
 
 import os
+import re
 import sys
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 # --- Loyiha papka manzillari (portable, cwd-independent) ---
 if getattr(sys, "frozen", False):
     # PyInstaller ONEDIR: writable/configurable release content is beside AI_CAM.exe,
     # not below the private extraction/import directory.
-    BASE_DIR = Path(sys.executable).resolve().parent
+    _DEFAULT_PROJECT_ROOT = Path(sys.executable).resolve().parent
 else:
-    BASE_DIR = Path(__file__).resolve().parent.parent
-PROJECT_ROOT = BASE_DIR                                 # explicit alias
-MODELS_DIR = BASE_DIR / "models"
-# v1.2.1 release: barcha runtime yozuv papkalari `runtime/` ostida (git-toza, portable).
-RUNTIME_DIR = BASE_DIR / "runtime"
+    _DEFAULT_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _configured_path(env_name: str, default: Path) -> Path:
+    value = os.environ.get(env_name, "").strip()
+    return Path(value).expanduser().resolve() if value else default.resolve()
+
+
+PROJECT_ROOT = _configured_path("AI_CAM_PROJECT_ROOT", _DEFAULT_PROJECT_ROOT)
+BASE_DIR = PROJECT_ROOT                                  # backward-compatible alias
+MODELS_DIR = PROJECT_ROOT / "models"
+# Windows/source default remains repository-local. Ubuntu service deployments set
+# AI_CAM_DATA_ROOT=/var/lib/ai-cam so persistent data never enters the checkout.
+RUNTIME_DIR = _configured_path("AI_CAM_DATA_ROOT", PROJECT_ROOT / "runtime")
 DATA_DIR = RUNTIME_DIR / "data"
 CROPS_DIR = RUNTIME_DIR / "crops"                       # kesilgan VIN rasmlari
-LOGS_DIR = RUNTIME_DIR / "logs"
+LOGS_DIR = _configured_path("AI_CAM_LOG_ROOT", RUNTIME_DIR / "logs")
 TEMP_DIR = RUNTIME_DIR / "temp"
 ENGRAVED_COLLECTION_DIR = RUNTIME_DIR / "engraved_ocr_collection"
+BACKUPS_DIR = RUNTIME_DIR / "backups"
 DB_PATH = DATA_DIR / "ai_cam.db"
 # Avtomatik dataset yig'ish papkasi (Data Loop)
 DATASET_DIR = RUNTIME_DIR / "dataset_collected"
@@ -40,7 +51,7 @@ PADDLE_CLS_DIR = MODELS_DIR / "paddle" / "cls"
 
 # Papkalar mavjudligini ta'minlash (runtime yozish uchun)
 for _d in (DATA_DIR, CROPS_DIR, LOGS_DIR, TEMP_DIR, ENGRAVED_COLLECTION_DIR,
-           MODELS_DIR, DATASET_DIR):
+           BACKUPS_DIR, MODELS_DIR, DATASET_DIR):
     _d.mkdir(parents=True, exist_ok=True)
 
 
@@ -210,6 +221,21 @@ class ServerConfig:
     port: int = 8080
     mjpeg_fps: int = 25                # live stream maksimal FPS
     jpeg_quality: int = 80             # MJPEG kodlash sifati
+
+
+@dataclass
+class OperationsConfig:
+    """24/7 host controls shared by Windows and systemd deployments."""
+
+    timezone: str = "Asia/Tashkent"
+    disk_warning_free_gb: float = 10.0
+    disk_critical_free_gb: float = 2.0
+    crop_retention_max: int = 5000
+    collector_retention_days: int = 0   # 0 = never delete review evidence automatically
+    backup_retention_days: int = 30
+    max_expected_child_processes: int = 8
+    health_preflight_timeout_sec: float = 1.0
+    file_logging_enabled: bool = True
 
 
 @dataclass
@@ -542,6 +568,7 @@ CAMERA = CameraConfig()
 DETECTION = DetectionConfig()
 OCR = OCRConfig()
 SERVER = ServerConfig()
+OPERATIONS = OperationsConfig()
 AUTH = AuthConfig()
 VIN = VINConfig()
 POS5_VERIFIER = Pos5VerifierConfig()
@@ -570,20 +597,75 @@ def is_production_mode() -> bool:
 # Barcha muhitga bog'liq sozlamalar shu fayldan o'qiladi va yuqoridagi
 # dataclass standart qiymatlarini ALMASHTIRADI. Fayl bo'lmasa — standartlar
 # ishlatiladi (ilova baribir ishlaydi). Hardcoded IP/port qolmaydi.
-CONFIG_DIR = BASE_DIR / "config"
-SETTINGS_PATH = CONFIG_DIR / "settings.yaml"
+CONFIG_DIR = PROJECT_ROOT / "config"
+BASE_SETTINGS_PATH = CONFIG_DIR / "settings.yaml"
+# SETTINGS_PATH remains the mutable/UI target for backward compatibility. On
+# Ubuntu it resolves to /etc/ai-cam/settings.production.yaml via AI_CAM_CONFIG.
+SETTINGS_PATH = _configured_path("AI_CAM_CONFIG", BASE_SETTINGS_PATH)
+CONFIG_SOURCES: list[str] = []
+CONFIG_LOAD_ERRORS: list[str] = []
+MISSING_ENV_REFERENCES: set[str] = set()
+_ENV_REFERENCE = re.compile(r"\$\{([A-Z][A-Z0-9_]*)\}")
 
 
-def _load_yaml_settings() -> dict:
-    if not SETTINGS_PATH.exists():
+def _deep_merge(base: dict, override: dict) -> dict:
+    merged = dict(base)
+    for key, value in (override or {}).items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _deep_merge(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def _expand_env(value):
+    if isinstance(value, dict):
+        return {key: _expand_env(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_expand_env(item) for item in value]
+    if not isinstance(value, str):
+        return value
+
+    def replace(match: re.Match) -> str:
+        name = match.group(1)
+        if name not in os.environ:
+            MISSING_ENV_REFERENCES.add(name)
+        return os.environ.get(name, "")
+
+    return _ENV_REFERENCE.sub(replace, value)
+
+
+def _read_yaml(path: Path, *, required: bool) -> dict:
+    if not path.exists():
+        if required:
+            CONFIG_LOAD_ERRORS.append(f"required config file is missing: {path}")
         return {}
     try:
         import yaml
-        with open(SETTINGS_PATH, "r", encoding="utf-8") as f:
-            return yaml.safe_load(f) or {}
-    except Exception as exc:                # yaml yo'q yoki sintaksis xatosi
-        print(f"[config] settings.yaml o'qilmadi ({exc}) — standart qiymatlar ishlatiladi.")
+        with path.open("r", encoding="utf-8") as stream:
+            data = yaml.safe_load(stream) or {}
+        if not isinstance(data, dict):
+            raise TypeError("top-level YAML value must be a mapping")
+        CONFIG_SOURCES.append(str(path.resolve()))
+        return data
+    except Exception as exc:
+        CONFIG_LOAD_ERRORS.append(f"{path}: {type(exc).__name__}: {exc}")
         return {}
+
+
+def _load_yaml_settings() -> dict:
+    """Load tracked production structure, then merge an optional host override."""
+    CONFIG_SOURCES.clear()
+    CONFIG_LOAD_ERRORS.clear()
+    MISSING_ENV_REFERENCES.clear()
+    base = _read_yaml(BASE_SETTINGS_PATH, required=True)
+    effective = base
+    if SETTINGS_PATH.resolve() != BASE_SETTINGS_PATH.resolve():
+        effective = _deep_merge(
+            base,
+            _read_yaml(SETTINGS_PATH, required=bool(os.environ.get("AI_CAM_CONFIG"))),
+        )
+    return _expand_env(effective)
 
 
 def _apply_section(obj, data) -> None:
@@ -676,6 +758,24 @@ def validate_config() -> list:
     rng(SESSION, "max_session_duration_sec", 0.1, 86400,
         "session.max_session_duration_sec")
     rng(PLC, "camera_delay_sec", 0, 3600, "plc.camera_delay_sec")
+    rng(OPERATIONS, "disk_warning_free_gb", 0.1, 100000,
+        "operations.disk_warning_free_gb")
+    rng(OPERATIONS, "disk_critical_free_gb", 0.1, 100000,
+        "operations.disk_critical_free_gb")
+    rng(OPERATIONS, "crop_retention_max", 0, 10000000,
+        "operations.crop_retention_max")
+    rng(OPERATIONS, "collector_retention_days", 0, 36500,
+        "operations.collector_retention_days")
+    rng(OPERATIONS, "backup_retention_days", 0, 36500,
+        "operations.backup_retention_days")
+    rng(OPERATIONS, "max_expected_child_processes", 1, 1000,
+        "operations.max_expected_child_processes")
+    rng(OPERATIONS, "health_preflight_timeout_sec", 0.05, 60,
+        "operations.health_preflight_timeout_sec")
+    if OPERATIONS.disk_critical_free_gb >= OPERATIONS.disk_warning_free_gb:
+        issues.append(
+            "operations.disk_critical_free_gb must be below disk_warning_free_gb"
+        )
     rng(PLC, "camera_search_timeout_sec", 1, 3600, "plc.camera_search_timeout_sec")
     rng(DETECTION, "conf_threshold", 0.0, 1.0, "detection.conf_threshold")
     rng(DETECTION, "ocr_trigger_conf", 0.0, 1.0, "detection.ocr_trigger_conf")
@@ -756,11 +856,12 @@ def validate_config() -> list:
 
 
 def apply_settings() -> dict:
-    """settings.yaml ni o'qib, global config obyektlarini yangilaydi (tip tekshiruvi bilan)."""
+    """Load layered YAML and environment overrides into global config objects."""
     cfg = _load_yaml_settings()
     issues: list = []
     section_map = {"camera": CAMERA, "detection": DETECTION, "ocr": OCR,
                    "server": SERVER, "auth": AUTH, "vin": VIN,
+                   "operations": OPERATIONS,
                    "pos5_verifier": POS5_VERIFIER,
                    "vin_slot_recognizer": VIN_SLOT_RECOGNIZER, "plc": PLC,
                    "rfid": RFID, "session": SESSION, "ocr_engines": OCR_ENGINES,
@@ -779,7 +880,17 @@ def apply_settings() -> dict:
             RFID.antenna_ports = tuple(RFID.antenna_ports)
     except Exception:
         pass
+    for target, attribute in (
+        (DETECTION, "model_path"),
+        (POS5_VERIFIER, "model_path"),
+        (VIN_SLOT_RECOGNIZER, "model_path"),
+    ):
+        raw_path = str(getattr(target, attribute, "") or "").strip()
+        if raw_path and not Path(raw_path).is_absolute():
+            setattr(target, attribute, str((PROJECT_ROOT / raw_path).resolve()))
+    _apply_environment_overrides(issues)
     issues += validate_config()
+    issues += CONFIG_LOAD_ERRORS
     if issues:
         print("[config] OGOHLANTIRISH — konfiguratsiya muammolari:")
         for it in issues:
@@ -787,26 +898,110 @@ def apply_settings() -> dict:
     return cfg
 
 
-# Modul yuklanganda bir marta qo'llaymiz
+# Deployment secrets and service-safe toggles never need to be committed.
+_ENV_OVERRIDES = (
+    ("AI_CAM_CAMERA_PASSWORD", CAMERA, "password"),
+    ("AI_CAM_RFID_USERNAME", RFID, "username"),
+    ("AI_CAM_RFID_PASSWORD", RFID, "password"),
+    ("AI_CAM_AUTH_USERNAME", AUTH, "username"),
+    ("AI_CAM_ADMIN_PASSWORD", AUTH, "password"),
+    ("AI_CAM_AUTH_PASSWORD", AUTH, "password"),  # explicit legacy name wins
+    ("AI_CAM_AUTH_OPERATOR_USERNAME", AUTH, "operator_username"),
+    ("AI_CAM_AUTH_OPERATOR_PASSWORD", AUTH, "operator_password"),
+    ("AI_CAM_PLC_ENABLED", PLC, "enabled"),
+    ("AI_CAM_RFID_ENABLED", RFID, "enabled"),
+    ("AI_CAM_OCR_USE_GPU", OCR, "use_gpu"),
+    ("AI_CAM_FILE_LOGGING", OPERATIONS, "file_logging_enabled"),
+    ("AI_CAM_SERVER_PORT", SERVER, "port"),
+)
+
+
+def _apply_environment_overrides(issues: list) -> None:
+    for env_name, target, attribute in _ENV_OVERRIDES:
+        if env_name in os.environ:
+            _coerce_field(target, attribute, os.environ[env_name], issues)
+
+
+def apply_no_hardware_mode() -> None:
+    """Disable every live device while retaining real model/server startup."""
+    os.environ["AI_CAM_NO_HARDWARE"] = "1"
+    PLC.enabled = False
+    PLC.mode = "simulator"
+    RFID.enabled = False
+    RFID.mode = "simulator"
+
+
+def _missing_secret(value: object) -> bool:
+    return str(value or "").strip().lower() in {
+        "", "admin", "change_me", "changeme", "password"
+    }
+
+
+def validate_required_secrets() -> list[str]:
+    """Return fatal credential omissions for an enabled real-device profile."""
+    if not is_production_mode():
+        return []
+    missing = []
+    if _missing_secret(CAMERA.password):
+        missing.append("AI_CAM_CAMERA_PASSWORD")
+    if RFID.enabled and str(RFID.mode).lower() == "r700":
+        if _missing_secret(RFID.username):
+            missing.append("AI_CAM_RFID_USERNAME")
+        if _missing_secret(RFID.password):
+            missing.append("AI_CAM_RFID_PASSWORD")
+    if AUTH.enabled and _missing_secret(AUTH.password):
+        missing.append("AI_CAM_ADMIN_PASSWORD (or AI_CAM_AUTH_PASSWORD)")
+    return missing
+
+
+def effective_config(*, redact: bool = True) -> dict:
+    """Serializable effective configuration and path/source provenance."""
+    sections = {
+        "camera": asdict(CAMERA),
+        "plc": asdict(PLC),
+        "rfid": asdict(RFID),
+        "session": asdict(SESSION),
+        "detection": asdict(DETECTION),
+        "ocr": asdict(OCR),
+        "ocr_engines": asdict(OCR_ENGINES),
+        "ocr_release": asdict(OCR_RELEASE),
+        "vin": asdict(VIN),
+        "server": asdict(SERVER),
+        "auth": asdict(AUTH),
+        "operations": asdict(OPERATIONS),
+    }
+    if redact:
+        for section in ("camera", "rfid", "auth"):
+            for key in list(sections[section]):
+                if any(token in key.lower() for token in ("password", "secret", "token")):
+                    sections[section][key] = "***" if sections[section][key] else ""
+    return {
+        "sources": list(CONFIG_SOURCES),
+        "load_errors": list(CONFIG_LOAD_ERRORS),
+        "missing_environment_references": sorted(MISSING_ENV_REFERENCES),
+        "paths": {
+            "project_root": str(PROJECT_ROOT),
+            "runtime_root": str(RUNTIME_DIR),
+            "data_root": str(DATA_DIR),
+            "log_root": str(LOGS_DIR),
+            "database": str(DB_PATH),
+            "crops": str(CROPS_DIR),
+            "temp": str(TEMP_DIR),
+            "collector": str(ENGRAVED_COLLECTION_DIR),
+            "backups": str(BACKUPS_DIR),
+            "models": str(MODELS_DIR),
+        },
+        "sections": sections,
+    }
+
+
+# Load once at import. settings_store may call this again after an operator edit.
 _LOADED_SETTINGS = apply_settings()
 
-# Deployment secrets may be injected without modifying the tracked YAML.
-_ENV_OVERRIDES = {
-    "AI_CAM_CAMERA_PASSWORD": (CAMERA, "password"),
-    "AI_CAM_RFID_USERNAME": (RFID, "username"),
-    "AI_CAM_RFID_PASSWORD": (RFID, "password"),
-    "AI_CAM_AUTH_USERNAME": (AUTH, "username"),
-    "AI_CAM_AUTH_PASSWORD": (AUTH, "password"),
-    "AI_CAM_AUTH_OPERATOR_USERNAME": (AUTH, "operator_username"),
-    "AI_CAM_AUTH_OPERATOR_PASSWORD": (AUTH, "operator_password"),
-}
-for _env_name, (_target, _attribute) in _ENV_OVERRIDES.items():
-    if _env_name in os.environ:
-        setattr(_target, _attribute, os.environ[_env_name])
-
-# P16 FIX: crop papkasi retention — disk to'lishining oldini oladi.
-# CROPS_DIR dagi rasm soni shu chegaradan oshsa, eng eski fayllar o'chiriladi.
-CROP_RETENTION_MAX = int(os.environ.get("AI_CAM_CROP_RETENTION_MAX", "5000"))
+# P16 FIX: crop retention is explicit and environment-overridable.
+CROP_RETENTION_MAX = int(os.environ.get(
+    "AI_CAM_CROP_RETENTION_MAX", str(OPERATIONS.crop_retention_max)
+))
 
 # VIN format qoidasi: 17 belgi, I/O/Q harflari yo'q (ISO 3779)
 VIN_LENGTH = 17

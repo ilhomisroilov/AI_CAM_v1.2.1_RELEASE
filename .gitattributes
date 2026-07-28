@@ -3,3 +3,6 @@
 *.pdmodel filter=lfs diff=lfs merge=lfs -text
 *.pdiparams filter=lfs diff=lfs merge=lfs -text
 *.nb filter=lfs diff=lfs merge=lfs -text
+*.sh text eol=lf
+*.service text eol=lf
+*.timer text eol=lf

@@ -20,6 +20,9 @@ from pathlib import Path
 from typing import Any
 
 from .config import (
+    BACKUPS_DIR,
+    CONFIG_LOAD_ERRORS,
+    CONFIG_SOURCES,
     CROPS_DIR,
     DATA_DIR,
     DB_PATH,
@@ -33,6 +36,8 @@ from .config import (
     RUNTIME_DIR,
     TEMP_DIR,
     TRAINED_MODEL_PATH,
+    effective_config,
+    validate_required_secrets,
 )
 
 RELEASE_VERSION = "1.2.1"
@@ -45,6 +50,7 @@ REQUIRED_RUNTIME_DIRS = (
     CROPS_DIR,
     TEMP_DIR,
     ENGRAVED_COLLECTION_DIR,
+    BACKUPS_DIR,
 )
 PADDLE_FILES = ("inference.pdmodel", "inference.pdiparams")
 DEPENDENCIES = {
@@ -68,9 +74,9 @@ class StartupGateError(RuntimeError):
     """A deterministic, operator-actionable startup-gate failure."""
 
 
-def _inside_root(path: Path) -> bool:
+def _inside(path: Path, root: Path) -> bool:
     try:
-        path.resolve().relative_to(PROJECT_ROOT.resolve())
+        path.resolve().relative_to(root.resolve())
         return True
     except (OSError, ValueError):
         return False
@@ -103,6 +109,7 @@ def validate_paths() -> dict[str, str]:
         "crops": CROPS_DIR,
         "temp": TEMP_DIR,
         "engraved_collection": ENGRAVED_COLLECTION_DIR,
+        "backups": BACKUPS_DIR,
         "yolo": TRAINED_MODEL_PATH,
         "engraved_onnx": ENGRAVED_ONNX,
         "engraved_metadata": ENGRAVED_METADATA,
@@ -110,10 +117,25 @@ def validate_paths() -> dict[str, str]:
         "paddle_rec": PADDLE_REC_DIR,
         "paddle_cls": PADDLE_CLS_DIR,
     }
-    escaped = [f"{name}={path}" for name, path in paths.items() if not _inside_root(path)]
+    model_names = {
+        "project_root", "yolo", "engraved_onnx", "engraved_metadata",
+        "paddle_det", "paddle_rec", "paddle_cls",
+    }
+    runtime_names = {
+        "runtime_root", "database", "crops", "temp", "engraved_collection",
+        "backups",
+    }
+    escaped = []
+    for name, path in paths.items():
+        if name in model_names and not _inside(path, PROJECT_ROOT):
+            escaped.append(f"{name}={path} (outside project root)")
+        elif name in runtime_names and not _inside(path, RUNTIME_DIR):
+            escaped.append(f"{name}={path} (outside data root)")
+        elif name == "logs" and not _inside(path, LOGS_DIR):
+            escaped.append(f"{name}={path} (outside log root)")
     if escaped:
         raise StartupGateError(
-            "configured path escapes the release root: " + ", ".join(escaped)
+            "configured path violates the deployment roots: " + ", ".join(escaped)
         )
     return {name: str(path.resolve()) for name, path in paths.items()}
 
@@ -275,6 +297,15 @@ def _write_report(name: str, report: dict[str, Any]) -> Path:
 
 def run_self_check(*, deep: bool = False, require_gpu: bool = False) -> dict[str, Any]:
     started = time.perf_counter()
+    if CONFIG_LOAD_ERRORS:
+        raise StartupGateError(
+            "configuration load failed: " + "; ".join(CONFIG_LOAD_ERRORS)
+        )
+    if sys.platform.startswith("linux") and sys.version_info[:2] != (3, 11):
+        raise StartupGateError(
+            "Linux production requires CPython 3.11; "
+            f"current interpreter is {sys.version_info.major}.{sys.version_info.minor}"
+        )
     report: dict[str, Any] = {
         "mode": "self-check",
         "version": RELEASE_VERSION,
@@ -284,6 +315,7 @@ def run_self_check(*, deep: bool = False, require_gpu: bool = False) -> dict[str
         "frozen": bool(getattr(sys, "frozen", False)),
         "runtime_directories": ensure_runtime_directories(),
         "paths": validate_paths(),
+        "configuration": effective_config(redact=True),
         "models": validate_model_artifacts(),
         "dependencies": dependency_diagnostics(),
     }
@@ -426,6 +458,12 @@ def run_dry_run() -> dict[str, Any]:
 
 
 def prepare_normal_startup() -> dict[str, Any]:
+    missing_secrets = validate_required_secrets()
+    if missing_secrets:
+        raise StartupGateError(
+            "real hardware mode requires secrets from "
+            "/etc/ai-cam/ai-cam.env: " + ", ".join(missing_secrets)
+        )
     report = run_self_check(deep=False, require_gpu=False)
     report["mode"] = "normal-startup"
     report["database"] = prepare_database(DB_PATH)

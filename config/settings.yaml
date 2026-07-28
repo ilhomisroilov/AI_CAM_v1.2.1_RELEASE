@@ -1,17 +1,26 @@
+# AI_CAM v1.2.1 production structure.
+# Non-secret line settings are version controlled. Secrets are expanded from
+# /etc/ai-cam/ai-cam.env (systemd EnvironmentFile) and never belong in Git.
 camera:
-  ip: 192.0.2.10
+  ip: 10.123.86.42
   cola_port: 2111
   blob_port: 2113
-  password: CHANGE_ME
+  blob_autodetect: false
+  password: ${AI_CAM_CAMERA_PASSWORD}
+  recv_timeout: 3.0
+  reconnect_delay: 2.0
+  trigger_pulse_off_delay: 0.15
+  capture_timeout: 5.0
   stale_after_sec: 3
   max_consecutive_timeouts: 5
   reconnect_initial_delay_sec: 1
   reconnect_max_delay_sec: 30
   reconnect_max_attempts: 0
+
 plc:
-  enabled: false
-  mode: simulator
-  ip: 192.0.2.20
+  enabled: true
+  mode: melsec
+  ip: 10.123.40.99
   port: 5003
   plc_type: Q
   signal_address: D2222
@@ -20,84 +29,116 @@ plc:
   signal_bit: 0
   trigger_mask: 0
   trigger_mode: pulse
+  trigger_kind:
+  trigger_bit: 0
   camera_delay_sec: 0
   camera_search_timeout_sec: 30
   done_address: ''
   done_value: 1
+  done_clear_value: 0
+  write_enabled: true
+  require_acknowledgement: false
+  ack_timeout_ms: 5000
+  startup_recovery_policy: wait_for_edge
+  exit_address: ''
+  exit_on_value: 1
   require_zero_before_rearm: true
   poll_interval_ms: 100
   reconnect_max_delay_sec: 30
   full_stop_on_zero: true
   auto_off_on_vin: true
   off_delay_sec: 0
+
 rfid:
-  enabled: false
-  mode: simulator
-  ip_address: 192.0.2.30
+  enabled: true
+  mode: r700
+  ip_address: 10.123.18.3
   port: 80
   timeout: 5
+  stale_event_tolerance_ms: 1500
   read_duration_ms: 700
   inventory_duration_ms: 6000
   inventory_retry_duration_ms: 4000
   inventory_retry_after_ms: 2000
   warmup_ms: 150
-  username: ''
-  password: ''
-  antenna_ports:
-  - 1
-  - 2
-  - 3
-  - 4
+  username: ${AI_CAM_RFID_USERNAME}
+  password: ${AI_CAM_RFID_PASSWORD}
+  antenna_ports: [1, 2, 3, 4]
   tx_power_cdbm: 3150
   epc_decimal_validate: true
   epc_decimal_min: 1000
   epc_decimal_max: 9999
+  reconnect_max_delay_sec: 30
   sim_epc: ''
+
 session:
   timeout_sec: 30
   hold_until_deadline: true
   require_rfid: true
   rfid_grace_sec: 15
   ocr_inflight_grace_sec: 15
-  # Navbatdagi trigger capture'ni shu muddatdan kech boshlasa, kuzov kamera
-  # oldidan o'tib ketgan hisoblanadi va sessiya MISSED_CAPTURE_WINDOW bilan
-  # yopiladi (kech boshlab NOTO'G'RI kuzovni o'qishdan xavfsizroq).
-  # Production takt vaqti va D2222 sensori-kamera masofasiga qarab sozlang.
+  max_pending_triggers: 10
+  overflow_policy: reject_with_alarm
   max_capture_delay_ms: 4000
+  exit_signal_enabled: false
+  post_exit_grace_ms: 2500
+  max_session_duration_sec: 30
+
 detection:
+  model_path: models/yolo/best.pt
   conf_threshold: 0.4
   ocr_trigger_conf: 0.85
   iou_threshold: 0.45
   device: cuda:0
+  crop_padding: 8
+  ocr_rearm_absent_frames: 3
+  ocr_cooldown_sec: 2
+  ocr_session_max_triggers: 12
   ocr_confirm_frames: 2
   ocr_submit_on_exit: true
+  ocr_crop_margin_frac: 0.15
   min_crop_quality: 0.45
+  event_buffer_max: 10
   fusion_k: 4
   collect_enabled: false
+  collect_conf: 0.4
+  collect_min_interval_sec: 1
+  collect_class_id: 0
+
 ocr:
   lang: en
   use_gpu: true
+  apply_clahe: true
+  clahe_clip: 3.0
+  clahe_grid: 8
+  upscale_height: 96
+  sharpen: true
   paddle_det: true
   det_fallback_enabled: false
+  use_angle_cls: false
   drop_score: 0.3
+  rec_batch_num: 6
+  det_limit_side_len: 960
+  min_char_confidence: 0.3
   min_confidence: 0.45
+  bilateral: true
+  bilateral_d: 5
+  bilateral_sigma: 50
   duplicate_window_sec: 90
   parallel_engines: 1
   enable_mkldnn: false
   cpu_threads: 1
   worker_task_timeout_sec: 12
+  worker_start_timeout_sec: 60
   worker_max_restarts: 50
-  variants_enabled:
-  - raw_resized
-  - clahe_unsharp
-  - blackhat_relief
-  variant_rotations:
-  - 0
-  - -3
-  - 3
+  queue_maxsize: 50
+  variants_enabled: [raw_resized, clahe_unsharp, blackhat_relief]
+  variant_rotations: [0, -3, 3]
   variant_deskew: true
   retry_enabled: true
+  retry_rotations: [-7, 7]
   max_ocr_attempts: 16
+
 vin:
   enabled: true
   default_model: QY
@@ -125,22 +166,17 @@ vin:
   struct_bonus_variable: 0.15
   require_known_model: true
   enforce_fixed_positions: true
-# v1.2.1 engine-neutral OCR orkestratsiya (docs/v1.2.1/OCR_ENGINE_CONTRACT.md).
-# Standart: faqat legacy PaddleOCR primary. Kelajakdagi engraved engine
-# STANDART BO'YICHA O'CHIRILGAN (shadow/fallback bo'sh) — model tayyor bo'lgach
-# shadow_engine: engraved_sequence qilib yoqiladi, keyin fallback, keyin primary.
+
 ocr_engines:
   primary_engine: paddleocr_legacy
-  shadow_engine: ''          # '' = shadow yo'q; keyin: engraved_sequence
-  fallback_engine: ''        # '' = fallback yo'q
+  shadow_engine: ''
+  fallback_engine: ''
   validation_profile: current_production
   charset_profile: alphanumeric_36
-  engraved_model_path: ''    # kelajakdagi engraved model (hozir mavjud emas)
-# v1.2.1 OCR release integration. SHADOW is the safe default (engraved = evidence only;
-# legacy Paddle stays the production decision). GUARDED_PRIMARY is available but must be
-# enabled deliberately and only when evaluation gates pass (currently blocked by weak classes).
+  engraved_model_path: ''
+
 ocr_release:
-  release_mode: SHADOW                # SHADOW | GUARDED_PRIMARY | DISABLED
+  release_mode: SHADOW
   engraved_enabled: true
   engraved_model_dir: models/engraved_ocr_v1.2.1
   engraved_expected_length: 17
@@ -152,13 +188,15 @@ ocr_release:
   collection_root: runtime/engraved_ocr_collection
   collection_target_chars: V,G,A,D,H,B,5,6,7,0,2,3
   weak_classes: 5,6,7,A,B,D,H
-  weak_classes_enabled: false         # weak classes gated to UNKNOWN by default
+  weak_classes_enabled: false
+
 pos5_verifier:
   enabled: false
   model_path: ''
   backend: hog_svm
   min_confidence: 0.6
   save_char_crops: false
+
 vin_slot_recognizer:
   enabled: false
   mode: shadow
@@ -171,15 +209,32 @@ vin_slot_recognizer:
   min_paddle_exact_reads: 1
   agree_bonus: 0.03
   reject_on_disagree: false
+
 server:
   host: 0.0.0.0
-  port: 8080                # 8000 -> 8080 (bosh port). Dashboard: http://<IP>:8080/dashboard
+  port: 8080
   mjpeg_fps: 25
   jpeg_quality: 80
+
 auth:
   enabled: true
   username: admin
-  password: CHANGE_ME
+  password: ${AI_CAM_ADMIN_PASSWORD}
+  operator_username: ''
+  operator_password: ${AI_CAM_AUTH_OPERATOR_PASSWORD}
   session_ttl_sec: 7200
   max_failed_attempts: 5
   lockout_seconds: 300
+  cookie_secure: false
+  csrf_enabled: true
+
+operations:
+  timezone: Asia/Tashkent
+  disk_warning_free_gb: 10
+  disk_critical_free_gb: 2
+  crop_retention_max: 5000
+  collector_retention_days: 0
+  backup_retention_days: 30
+  max_expected_child_processes: 8
+  health_preflight_timeout_sec: 1
+  file_logging_enabled: true

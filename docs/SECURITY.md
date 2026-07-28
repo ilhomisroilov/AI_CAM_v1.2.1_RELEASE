@@ -120,7 +120,7 @@ handlerlardan OLDIN ishlaydi. Ikki qatlam:
 2. **Dinamik aniq-qiymat almashtirish**: joriy `CAMERA.password`,
    `RFID.password`, `AUTH.password` (config'dan reload'ga chidamli o'qiladi)
    — bu qiymatlar log matnining QAYERIDA bo'lishidan qat'i nazar (masalan
-   `sMN CheckPassword 3 A89A6E74` kabi tag'siz format) `***` bilan
+   `sMN CheckPassword 3 <credential>` kabi tag'siz format) `***` bilan
    almashtiriladi.
 
 Bu **camera_client.py, rfid/*, auth.py, server.py kabi barcha chaqiruvchi
@@ -130,7 +130,7 @@ markazlashgan yechim (audit talabiga muvofiq).
 ### Mavjud loglardagi allaqachon yozilgan secret — operator tozalash ko'rsatmasi
 
 `logs/ai_cam.log` faylida (audit topilmasi: qator ~2422 atrofida va
-boshqa joylarda) kamera CoLa paroli (`A89A6E74`) ochiq matn holida allaqachon
+boshqa joylarda) kamera CoLa paroli ochiq matn holida allaqachon
 yozib qo'yilgan — bu **yangi sanitizer BILAN HAM tuzatilmaydi**, chunki u
 FAQAT yangi log yozuvlariga ta'sir qiladi. Bu agent, ko'rsatmaga muvofiq,
 mavjud log fayllarni O'CHIRMADI (ular audit dalili). Operator quyidagi

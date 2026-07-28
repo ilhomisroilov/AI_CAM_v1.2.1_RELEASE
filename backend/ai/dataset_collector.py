@@ -73,7 +73,7 @@ class DatasetCollector:
         self._thread.start()
         log.info(f"Dataset auto-collection yoqildi -> {self.out_dir} (conf>{self.collect_conf})")
 
-    def stop(self) -> None:
+    def stop(self, timeout: float = 5.0) -> None:
         if not self._running:
             return
         self._running = False
@@ -81,6 +81,11 @@ class DatasetCollector:
             self._queue.put_nowait(None)        # stop sentinel
         except queue.Full:
             pass
+        thread = self._thread
+        if (thread is not None and thread.is_alive()
+                and thread is not threading.current_thread()):
+            thread.join(timeout=max(0.0, float(timeout)))
+        self._thread = None
         log.info(f"Dataset auto-collection to'xtatildi (jami saqlangan: {self.saved_count}).")
 
     # ---------------------------------------------------------------

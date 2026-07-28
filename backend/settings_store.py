@@ -77,4 +77,5 @@ def defaults() -> Dict[str, Any]:
         "vin_slot_recognizer": _fields(C.VinSlotRecognizerConfig()),
         "server": _fields(C.ServerConfig()),
         "auth": _fields(C.AuthConfig()),
+        "operations": _fields(C.OperationsConfig()),
     }

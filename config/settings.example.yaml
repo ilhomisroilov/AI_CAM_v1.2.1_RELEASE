@@ -1,0 +1,37 @@
+# Simulator-safe example. Copy host-specific overrides to
+# /etc/ai-cam/settings.production.yaml; do not put secrets in YAML.
+camera:
+  ip: 192.0.2.10
+  cola_port: 2111
+  blob_port: 2113
+  password: CHANGE_ME
+plc:
+  enabled: false
+  mode: simulator
+  ip: 192.0.2.20
+  port: 5003
+  plc_type: Q
+  signal_address: D2222
+  trigger_on_value: 1
+  signal_kind: bit
+  signal_bit: 0
+  trigger_mode: pulse
+  exit_address: ''
+rfid:
+  enabled: false
+  mode: simulator
+  ip_address: 192.0.2.30
+  port: 80
+  username: ''
+  password: ''
+server:
+  host: 127.0.0.1
+  port: 8080
+auth:
+  enabled: true
+  username: admin
+  password: CHANGE_ME
+ocr:
+  use_gpu: false
+detection:
+  device: cpu

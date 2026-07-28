@@ -11,6 +11,7 @@ import concurrent.futures as futures
 import hashlib
 import os
 import threading
+from pathlib import Path
 from typing import Optional
 
 import numpy as np
@@ -29,7 +30,7 @@ _stage: Optional[ShadowOcrStage] = None
 _collector = None
 _built = False
 _disabled_reason = None
-_executor = futures.ThreadPoolExecutor(
+_executor: Optional[futures.ThreadPoolExecutor] = futures.ThreadPoolExecutor(
     max_workers=1, thread_name_prefix="ocr-v121-shadow"
 )
 _submitted: set[tuple[str, str]] = set()
@@ -54,7 +55,7 @@ def _build() -> None:
             return
         _built = True
         try:
-            from ..config import OCR_RELEASE, PROJECT_ROOT
+            from ..config import ENGRAVED_COLLECTION_DIR, OCR_RELEASE, PROJECT_ROOT
             from ..database import db as _db
             from ..logger import log
 
@@ -118,11 +119,15 @@ def _build() -> None:
             if getattr(OCR_RELEASE, "collection_enabled", True):
                 from .ocr_collector import ActiveLearningCollector
 
-                root = PROJECT_ROOT / getattr(
-                    OCR_RELEASE,
-                    "collection_root",
-                    "runtime/engraved_ocr_collection",
-                )
+                configured_root = str(getattr(
+                    OCR_RELEASE, "collection_root", ""
+                ) or "").strip()
+                if configured_root in ("", "runtime/engraved_ocr_collection"):
+                    root = ENGRAVED_COLLECTION_DIR
+                else:
+                    root = Path(configured_root)
+                    if not root.is_absolute():
+                        root = PROJECT_ROOT / root
                 collector = ActiveLearningCollector(
                     str(root),
                     store_fn=lambda item: _store_collection(conn_factory, item),
@@ -203,7 +208,10 @@ def dispatch_shadow_ocr_input(
         if key in _submitted:
             return None
         _submitted.add(key)
-    return _executor.submit(
+    executor = _executor
+    if executor is None:
+        return None
+    return executor.submit(
         _run_input,
         session_id,
         np.asarray(crop).copy(),
@@ -281,4 +289,26 @@ def shadow_status() -> dict:
             if _stage is not None
             else []
         ),
+        "executor_running": _executor is not None,
     }
+
+
+def shutdown_shadow_ocr(wait: bool = False) -> None:
+    """Stop accepting shadow work, flush evidence, then release all engines."""
+    global _executor, _stage, _collector
+    with _lock:
+        executor, _executor = _executor, None
+        stage, _stage = _stage, None
+        collector, _collector = _collector, None
+    if executor is not None:
+        executor.shutdown(wait=bool(wait), cancel_futures=True)
+    if collector is not None:
+        close = getattr(collector, "close", None)
+        if callable(close):
+            close()
+    if stage is not None:
+        for engine in stage.orch.engines.values():
+            try:
+                engine.close()
+            except Exception:
+                pass

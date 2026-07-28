@@ -11,6 +11,8 @@ __pycache__/
 .env
 .env.*
 !.env.example
+ai-cam.env
+deploy/local/
 
 # Release runtime data (placeholders remain tracked)
 runtime/data/*
@@ -24,6 +26,8 @@ runtime/temp/*
 runtime/engraved_ocr_collection/*
 !runtime/engraved_ocr_collection/.gitkeep
 runtime/dataset_collected/*
+runtime/backups/*
+runtime/*.lock
 
 # Legacy runtime locations (must never ship with data)
 data/crops/*
@@ -44,6 +48,7 @@ dataset/collected_raw/*
 # Build/package output
 dist/
 build/
+dist-linux/
 *.spec.bak
 
 # Benchmark/diagnostic payloads

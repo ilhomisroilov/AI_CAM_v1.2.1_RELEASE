@@ -2,7 +2,7 @@
 tests/test_settings_secret_masking.py
 ============================================================
 P1 — /api/settings plaintext credentials (audit finding: server.py:546-549,
-camera password + RFID root/impinj ochiq ko'rinadi).
+camera/RFID credentials ochiq ko'rinadi).
 
 Qamrab oladi:
   1) GET /api/settings hech qachon plaintext secret qaytarmaydi (data + raw)

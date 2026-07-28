@@ -1,0 +1,30 @@
+[Unit]
+Description=AI_CAM v1.2.1 Industrial VIN Vision
+Documentation=file:/opt/ai-cam/docs/UBUNTU_26_SYSTEMD.md
+Wants=network-online.target
+After=network-online.target
+# The host must have VLAN/routes to 10.123.86.0/24, 10.123.40.0/24,
+# and 10.123.18.0/24. Temporary device loss is handled inside AI_CAM.
+
+[Service]
+Type=simple
+User=aicam
+Group=aicam
+WorkingDirectory=/opt/ai-cam
+EnvironmentFile=/etc/ai-cam/ai-cam.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/ai-cam/.venv/bin/python /opt/ai-cam/run.py
+Restart=always
+RestartSec=5
+TimeoutStartSec=240
+TimeoutStopSec=90
+KillSignal=SIGTERM
+KillMode=mixed
+UMask=0027
+LimitNOFILE=65536
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

@@ -86,6 +86,8 @@ def _now_iso() -> str:
 def _connect() -> sqlite3.Connection:
     conn = sqlite3.connect(str(current_db_path()), timeout=10.0)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA busy_timeout=10000")
+    conn.execute("PRAGMA foreign_keys=ON")
     return conn
 
 
@@ -161,6 +163,11 @@ def init_db() -> None:
     FAILED qilib yopiladi (P1 — "restart paytida hech narsa yozilmaydi" fix).
     """
     with _lock, closing(_connect()) as conn, conn:
+        # WAL permits concurrent dashboard reads while the pipeline commits a
+        # result. NORMAL is the documented durability/performance pairing for
+        # WAL; systemd backups use SQLite's online backup API.
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
         _validate_session_schema(conn)     # eski DB uchun jim ALTER emas — aniq xato
         conn.execute(
             """

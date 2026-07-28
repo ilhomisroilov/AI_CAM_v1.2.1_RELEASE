@@ -180,19 +180,19 @@ def test_logout_invalidates_session(client, monkeypatch):
 # 10: Parol logga chiqmaydi (markazlashgan sanitizer, logger.py)
 # ===================================================================
 def test_camera_password_sanitized_in_log_line(monkeypatch):
-    monkeypatch.setattr(config_mod.CAMERA, "password", "A89A6E74")
-    text = "C->K  sMN CheckPassword 3 A89A6E74"
+    monkeypatch.setattr(config_mod.CAMERA, "password", "TestCameraPassword-NotProduction!")
+    text = "C->K  sMN CheckPassword 3 TestCameraPassword-NotProduction!"
     out = _SecretSanitizer._sanitize(text)
-    assert "A89A6E74" not in out
+    assert "TestCameraPassword-NotProduction!" not in out
     assert "***" in out
 
 
 def test_rfid_and_auth_password_sanitized_via_key_value_pattern(monkeypatch):
-    monkeypatch.setattr(config_mod.RFID, "password", "impinjSecretXYZ")
+    monkeypatch.setattr(config_mod.RFID, "password", "TestRfidPassword-NotProduction!")
     monkeypatch.setattr(config_mod.AUTH, "password", "AuthSecretXYZ")
-    text = "connecting rfid password=impinjSecretXYZ auth password: AuthSecretXYZ"
+    text = "connecting rfid password=TestRfidPassword-NotProduction! auth password: AuthSecretXYZ"
     out = _SecretSanitizer._sanitize(text)
-    assert "impinjSecretXYZ" not in out
+    assert "TestRfidPassword-NotProduction!" not in out
     assert "AuthSecretXYZ" not in out
 
 

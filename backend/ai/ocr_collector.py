@@ -90,8 +90,12 @@ class ActiveLearningCollector:
         while (not self._q.empty() or self._inflight > 0) and time.time() < end:
             time.sleep(0.02)
 
-    def close(self) -> None:
+    def close(self, timeout: float = 5.0) -> None:
+        self.flush(timeout=max(0.0, float(timeout)))
         self._stop = True
+        if (self._thread.is_alive()
+                and self._thread is not threading.current_thread()):
+            self._thread.join(timeout=max(0.0, float(timeout)))
 
     # -- core processing (also directly callable in tests) --
     def _process(self, job: dict) -> int:

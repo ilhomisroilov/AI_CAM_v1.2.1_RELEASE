@@ -1,0 +1,16 @@
+# Ubuntu host override layered over /opt/ai-cam/config/settings.yaml.
+# Keep credentials in /etc/ai-cam/ai-cam.env, never in this file.
+server:
+  host: 0.0.0.0
+  port: 8080
+
+operations:
+  timezone: Asia/Tashkent
+  disk_warning_free_gb: 10
+  disk_critical_free_gb: 2
+  crop_retention_max: 5000
+  collector_retention_days: 0
+  backup_retention_days: 30
+  max_expected_child_processes: 8
+  health_preflight_timeout_sec: 1
+  file_logging_enabled: true

@@ -1,0 +1,15 @@
+[Unit]
+Description=AI_CAM consistent SQLite backup
+ConditionPathExists=/var/lib/ai-cam/data/ai_cam.db
+
+[Service]
+Type=oneshot
+User=aicam
+Group=aicam
+WorkingDirectory=/opt/ai-cam
+EnvironmentFile=/etc/ai-cam/ai-cam.env
+ExecStart=/opt/ai-cam/scripts/backup_database.sh
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true

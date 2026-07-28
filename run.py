@@ -29,6 +29,8 @@ import multiprocessing
 import signal
 import site
 import sys
+from urllib.error import HTTPError, URLError
+from urllib.request import urlopen
 from datetime import datetime
 from pathlib import Path
 
@@ -54,12 +56,12 @@ from backend.native_runtime import configure_native_library_path
 # Must happen before the self-check or OCR worker subprocess is created.
 configure_native_library_path()
 
-from backend.config import SERVER
+from backend.config import DB_PATH, SERVER
 from backend.release_startup import StartupGateError
 from backend.version import APP_VERSION
 
 # LAN kirish uchun har doim barcha interfeyslarni tinglaymiz
-HOST = "0.0.0.0"
+HOST = SERVER.host
 PORT = SERVER.port
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp"}
 
@@ -89,8 +91,12 @@ def _print_banner(lan_ip: str) -> None:
     print(f"  Shu kompyuterda:     http://localhost:{PORT}/dashboard")
     print(f"  Tarmoqdagi boshqalar: http://{lan_ip}:{PORT}/dashboard   <-- ULASHING")
     print(line)
-    print("  Eslatma: boshqa PC ulana olmasa, Windows Firewall da")
-    print(f"  {PORT}-port (TCP, Inbound) uchun ruxsat oching (quyidagi izohga qarang).")
+    if os.name == "nt":
+        print("  Eslatma: boshqa PC ulana olmasa, Windows Firewall da")
+        print(f"  {PORT}-port (TCP, Inbound) uchun ruxsat oching.")
+    else:
+        print("  systemd: journalctl -u ai-cam.service -f")
+        print(f"  firewall: TCP/{PORT} ga zavod LANidan ruxsat kerak.")
     print(line + "\n")
 
 
@@ -245,13 +251,25 @@ def parse_args():
                     help="serverni ochmasdan release/model/dependency diagnostikasini bajaradi")
     ap.add_argument("--dry-run", action="store_true",
                     help="hardware/serverni ochmasdan DB migration va real OCR init/inference qiladi")
+    ap.add_argument("--migrate", action="store_true",
+                    help="configured SQLite bazasini idempotent migrate qiladi va chiqadi")
+    ap.add_argument("--health-check", action="store_true",
+                    help="ishlayotgan lokal server /health endpointini tekshiradi")
+    ap.add_argument("--print-config", action="store_true",
+                    help="effective layered config ni secretlarsiz JSON ko'rinishida chiqaradi")
+    ap.add_argument("--no-hardware", action="store_true",
+                    help="PLC/RFIDni simulator-safe rejimga o'tkazadi (smoke/test uchun)")
     ap.add_argument("--deep", action="store_true",
                     help="--self-check bilan real Torch/Paddle tensor amallarini bajaradi")
     ap.add_argument("--require-gpu", action="store_true",
                     help="--self-check GPU serverda ikkala engine CUDA ishlatmasa xato qaytaradi")
     args = ap.parse_args()
-    if args.self_check and args.dry_run:
-        ap.error("--self-check va --dry-run bir vaqtda ishlatilmaydi")
+    terminal_modes = (
+        args.self_check, args.dry_run, args.migrate,
+        args.health_check, args.print_config, args.vin_shadow_once,
+    )
+    if sum(bool(mode) for mode in terminal_modes) > 1:
+        ap.error("faqat bitta terminal rejimni tanlang")
     if args.require_gpu and not args.self_check:
         ap.error("--require-gpu faqat --self-check bilan ishlatiladi")
     if args.deep and not args.self_check:
@@ -264,10 +282,15 @@ def main() -> int:
     args = parse_args()
     try:
         from backend.release_startup import (
+            prepare_database,
             prepare_normal_startup,
             run_dry_run,
             run_self_check,
         )
+        if args.no_hardware:
+            from backend.config import apply_no_hardware_mode
+
+            apply_no_hardware_mode()
 
         if args.self_check:
             report = run_self_check(
@@ -280,6 +303,34 @@ def main() -> int:
             report = run_dry_run()
             print(json.dumps(report, indent=2, sort_keys=True, default=str))
             return 0
+        if args.migrate:
+            report = prepare_database(DB_PATH)
+            print(json.dumps(report, indent=2, sort_keys=True, default=str))
+            return 0
+        if args.print_config:
+            from backend.config import effective_config
+
+            print(json.dumps(
+                effective_config(redact=True),
+                indent=2,
+                sort_keys=True,
+                default=str,
+            ))
+            return 0
+        if args.health_check:
+            try:
+                with urlopen(
+                    f"http://127.0.0.1:{PORT}/health", timeout=5.0
+                ) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+                    print(json.dumps(payload, indent=2, sort_keys=True))
+                    return 0 if response.status == 200 and payload.get("status") == "ok" else 3
+            except HTTPError as exc:
+                print(exc.read().decode("utf-8", errors="replace"), file=sys.stderr)
+                return 3
+            except (URLError, TimeoutError, json.JSONDecodeError) as exc:
+                print(f"[AI_CAM HEALTH] {type(exc).__name__}: {exc}", file=sys.stderr)
+                return 3
         if args.vin_shadow_once:
             return run_vin_shadow_once(
                 PROJECT_ROOT / args.vin_shadow_model,
@@ -287,40 +338,43 @@ def main() -> int:
                 PROJECT_ROOT / args.vin_shadow_out,
             )
 
-        startup = prepare_normal_startup()
-        print(json.dumps({
-            "startup": "ready",
-            "version": APP_VERSION,
-            "paths": startup.get("paths", {}),
-            "database": startup.get("database", {}),
-        }, indent=2, sort_keys=True, default=str))
-        if args.vin_shadow:
-            start_vin_shadow_watcher(
-                PROJECT_ROOT / args.vin_shadow_model,
-                PROJECT_ROOT / args.vin_shadow_crops,
-                PROJECT_ROOT / args.vin_shadow_out,
-                args.vin_shadow_interval,
+        from backend.instance_lock import InstanceLock
+
+        with InstanceLock():
+            startup = prepare_normal_startup()
+            print(json.dumps({
+                "startup": "ready",
+                "version": APP_VERSION,
+                "paths": startup.get("paths", {}),
+                "database": startup.get("database", {}),
+            }, indent=2, sort_keys=True, default=str))
+            if args.vin_shadow:
+                start_vin_shadow_watcher(
+                    PROJECT_ROOT / args.vin_shadow_model,
+                    PROJECT_ROOT / args.vin_shadow_crops,
+                    PROJECT_ROOT / args.vin_shadow_out,
+                    args.vin_shadow_interval,
+                )
+            _print_banner(get_lan_ip())
+            import uvicorn
+            # reload=False — fon threadlari (kamera/OCR) bilan ziddiyat bo'lmasligi uchun
+            uvicorn_config = uvicorn.Config(
+                "backend.server:app",
+                host=HOST,
+                port=PORT,
+                reload=False,
+                log_level="info",
             )
-        _print_banner(get_lan_ip())
-        import uvicorn
-        # reload=False — fon threadlari (kamera/OCR) bilan ziddiyat bo'lmasligi uchun
-        uvicorn_config = uvicorn.Config(
-            "backend.server:app",
-            host=HOST,
-            port=PORT,
-            reload=False,
-            log_level="info",
-        )
-        uvicorn_server = uvicorn.Server(uvicorn_config)
-        # Windows smoke/service runners use CTRL_BREAK for a process group.
-        # Uvicorn handles SIGINT/SIGTERM itself but not SIGBREAK; translating
-        # it into should_exit preserves the ASGI lifespan shutdown and exit 0.
-        if hasattr(signal, "SIGBREAK"):
-            signal.signal(
-                signal.SIGBREAK,
-                lambda _signum, _frame: setattr(uvicorn_server, "should_exit", True),
-            )
-        uvicorn_server.run()
+            uvicorn_server = uvicorn.Server(uvicorn_config)
+            # Windows smoke/service runners use CTRL_BREAK for a process group.
+            # Uvicorn handles SIGINT/SIGTERM itself but not SIGBREAK; translating
+            # it into should_exit preserves the ASGI lifespan shutdown and exit 0.
+            if hasattr(signal, "SIGBREAK"):
+                signal.signal(
+                    signal.SIGBREAK,
+                    lambda _signum, _frame: setattr(uvicorn_server, "should_exit", True),
+                )
+            uvicorn_server.run()
         return 0
     except StartupGateError as exc:
         print(f"[AI_CAM STARTUP GATE] {exc}", file=sys.stderr)

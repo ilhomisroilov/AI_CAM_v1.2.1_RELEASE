@@ -28,7 +28,7 @@ import time
 from collections import deque
 from typing import Deque, Dict, List, Optional
 
-from .config import LOGS_DIR
+from .config import LOGS_DIR, OPERATIONS
 
 _MAX_UI_LOGS = 1000          # UI ring-buffer hajmi (yengil, lekin kengroq tarix)
 
@@ -297,13 +297,15 @@ def setup_logger(name: str = "ai_cam") -> logging.Logger:
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
-    # 1) Per-source aylanuvchi fayllar (10MB x 30)
-    _add_file(logger, fmt, "system.log", None)               # hammasi
-    _add_file(logger, fmt, "plc.log", _OnlySource("PLC"))
-    _add_file(logger, fmt, "rfid.log", _OnlySource("RFID"))
-    _add_file(logger, fmt, "camera.log", _OnlySource("CAMERA"))
-    _add_file(logger, fmt, "ocr.log", _OnlySource("OCR"))
-    _add_file(logger, fmt, "errors.log", _OnlyErrors())
+    # 1) Optional per-source files. systemd defaults to console/journald only;
+    # sites that enable files also install the bounded logrotate policy.
+    if OPERATIONS.file_logging_enabled:
+        _add_file(logger, fmt, "system.log", None)               # hammasi
+        _add_file(logger, fmt, "plc.log", _OnlySource("PLC"))
+        _add_file(logger, fmt, "rfid.log", _OnlySource("RFID"))
+        _add_file(logger, fmt, "camera.log", _OnlySource("CAMERA"))
+        _add_file(logger, fmt, "ocr.log", _OnlySource("OCR"))
+        _add_file(logger, fmt, "errors.log", _OnlyErrors())
 
     # 2) Konsol
     ch = logging.StreamHandler()

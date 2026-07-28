@@ -47,7 +47,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 
 from . import auth
-from .config import AUTH, CROPS_DIR, OCR, PLC, RFID, SERVER
+from .config import AUTH, CROPS_DIR, DB_PATH, OCR, PLC, RFID, SERVER
 from .database import db
 from .logger import (log, ui_handler, search_files, clear_files,
                      LOG_FILES, SOURCES)
@@ -57,6 +57,7 @@ from .rfid.rfid_service import RFIDService
 from .runtime import (apply_safe_runtime_policy, enforce_runtime_startup,
                       get_runtime_diagnostics, log_runtime_report,
                       record_ocr_preload, runtime_health_summary)
+from .production_runtime import operational_snapshot, run_network_preflight
 from .version import API_VERSION, APP_VERSION
 
 # Performance metrics uchun psutil (ixtiyoriy — bo'lmasa null qaytadi)
@@ -89,6 +90,13 @@ async def lifespan(app: FastAPI):
     # --- Startup ---
     auth.enforce_startup_security_policy()
     db.init_db()
+    preflight = run_network_preflight()
+    for endpoint, result in preflight["endpoints"].items():
+        if result.get("reachable") is False:
+            log.warning(
+                "[PREFLIGHT] %s unreachable at %s:%s (%s)",
+                endpoint, result.get("host"), result.get("port"), result.get("error"),
+            )
     # Requested GPU settings are accepted only when the installed native engine
     # can actually use CUDA.  A CPU-only Windows host remains operational.
     runtime_report = apply_safe_runtime_policy(OCR)
@@ -113,9 +121,17 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         # --- Graceful shutdown (P17) ---
-        for name, fn in (("PLC", plc_service.stop), ("RFID", rfid_service.stop),
-                         ("kamera", pipeline.disconnect_camera),
-                         ("OCR", pipeline.ocr.shutdown)):
+        from .ai.ocr_shadow_hook import shutdown_shadow_ocr
+
+        for name, fn in (
+            ("PLC", plc_service.stop),
+            ("sessions", pipeline.prepare_shutdown),
+            ("processing", pipeline.stop_processing),
+            ("kamera", pipeline.disconnect_camera),
+            ("RFID", rfid_service.stop),
+            ("OCR shadow", shutdown_shadow_ocr),
+            ("OCR", pipeline.ocr.shutdown),
+        ):
             try:
                 fn()
             except Exception as exc:
@@ -448,6 +464,7 @@ def health() -> JSONResponse:
     rfid = rfid_service.status()
 
     runtime = runtime_health_summary(get_runtime_diagnostics())
+    operational = operational_snapshot()
     ocr_stats = pst.get("ocr", {})
 
     # v1.2.1: additive engine/model/version/readiness report (never breaks /health).
@@ -456,6 +473,12 @@ def health() -> JSONResponse:
         ocr_engines_report = engines_health_report()
     except Exception:
         ocr_engines_report = []
+    try:
+        from .ai.ocr_shadow_hook import shadow_status
+
+        shadow = shadow_status()
+    except Exception as exc:
+        shadow = {"ready": False, "error": f"{type(exc).__name__}: {exc}"}
 
     components = {
         "yolo": {"ready": pst.get("yolo_ready", False),
@@ -463,7 +486,8 @@ def health() -> JSONResponse:
         "ocr": {"running": ocr_stats.get("running", False),
                 "gpu": bool(runtime["policy"].get("ocr_gpu_effective")),
                 "preload": runtime.get("ocr_preload", {}),
-                "engines": ocr_engines_report},
+                "engines": ocr_engines_report,
+                "shadow": shadow},
         "plc": {"enabled": PLC.enabled, "running": plc.get("running", False),
                 "connected": plc.get("connected", False), "mode": plc.get("mode"),
                 "signal": plc.get("signal")},
@@ -474,6 +498,10 @@ def health() -> JSONResponse:
                    "decode_format": pst.get("stream", {}).get("decode_format"),
                    "decode_fail_total": pst.get("stream", {}).get("decode_fail_total", 0)},
         "runtime": runtime,
+        "database": operational["database"],
+        "disk": operational["disk"],
+        "process": operational["process"],
+        "network_preflight": operational["network_preflight"],
     }
 
     # Kritiklik: PLC yoqilgan-u ishlamayapti, yoki YOLO tayyor emas -> degraded/critical
@@ -487,9 +515,24 @@ def health() -> JSONResponse:
     plc_was_started = getattr(plc_service, "_thread", None) is not None
     if PLC.enabled and plc_was_started and not plc.get("running", False):
         critical = True
+    if operational["database"].get("integrity") in ("error",):
+        critical = True
+    if any(
+        item.get("status") == "critical"
+        for item in operational["disk"].values()
+    ):
+        critical = True
     status_str = "ok" if not critical else "critical"
     code = 200 if not critical else 503
-    return JSONResponse({"status": status_str, "components": components,
+    return JSONResponse({"status": status_str,
+                         "application": {"name": "AI_CAM",
+                                         "version": APP_VERSION,
+                                         "api_version": API_VERSION},
+                         "config_sources": operational["config_sources"],
+                         "database_path": str(DB_PATH),
+                         "components": components,
+                         "session": pst.get("session", {}),
+                         "health": pst.get("health", {}),
                          "stats": pst.get("stats", {}),
                          "stream": pst.get("stream", {})}, status_code=code)
 

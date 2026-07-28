@@ -24,6 +24,7 @@ UI semantikasi:
 """
 from __future__ import annotations
 
+import shutil
 import sqlite3
 import threading
 import time
@@ -743,8 +744,21 @@ class Pipeline:
           * kamera band bo'lsa -> bounded FIFO navbat (jim tashlanmaydi);
           * navbat to'lsa -> aniq rad + CRITICAL log + metrika.
         """
-        from .config import SESSION
+        from .config import OPERATIONS, RUNTIME_DIR, SESSION
         self._ensure_session_runtime()
+        try:
+            free_gb = shutil.disk_usage(RUNTIME_DIR).free / (1024 ** 3)
+            if free_gb <= float(OPERATIONS.disk_critical_free_gb):
+                with self._session_lock:
+                    self._dropped_trigger_count += 1
+                log.critical(
+                    "[DISK CRITICAL] PLC trigger rejected before capture: "
+                    f"{free_gb:.2f} GiB free <= "
+                    f"{OPERATIONS.disk_critical_free_gb:.2f} GiB critical threshold."
+                )
+                return
+        except OSError as exc:
+            log.warning(f"[DISK] Trigger-time free-space check failed: {exc}")
         with self._session_lock:
             self._trigger_sequence += 1
             seq = self._trigger_sequence
@@ -1393,7 +1407,8 @@ class Pipeline:
                          and not bool(SESSION.exit_signal_enabled))
             if (hard_hold and time.monotonic() < session.deadline
                     and reason not in ("HARD_DEADLINE", "WATCHDOG_ERROR",
-                                       "TEST_FORCE_CLOSE", "MISSED_CAPTURE_WINDOW")):
+                                       "TEST_FORCE_CLOSE", "MISSED_CAPTURE_WINDOW",
+                                       "SERVICE_SHUTDOWN")):
                 log.info(f"[SESSION #{session_id}] '{reason}' erta finalize rad etildi.")
                 self._mirror_legacy_locked(session)
                 return
@@ -1534,6 +1549,32 @@ class Pipeline:
             log.info(f"[QUEUE] Navbatdagi trigger #{seq} avtomatik boshlanmoqda "
                      f"(navbatda qolgan={len(self._pending_triggers)}).")
             self._start_session(seq, triggered_at)
+
+    def prepare_shutdown(self) -> None:
+        """Reject queued work and durably cancel every nonterminal session."""
+        self._ensure_session_runtime()
+        with self._session_lock:
+            dropped = len(self._pending_triggers)
+            self._pending_triggers.clear()
+            open_ids = [
+                session_id
+                for session_id, session in self._sessions.items()
+                if session.state not in _TERMINAL_SESSION_STATES
+                and session.state != SessionState.FINALIZING
+            ]
+            for session_id in open_ids:
+                self._sessions[session_id].failure_reason = "SERVICE_SHUTDOWN"
+            self._dropped_trigger_count += dropped
+        if dropped:
+            log.warning(
+                f"[SHUTDOWN] {dropped} queued trigger(s) cancelled before exit."
+            )
+        for session_id in open_ids:
+            self._finalize_session(
+                session_id,
+                reason="SERVICE_SHUTDOWN",
+                failure_state=SessionState.CANCELLED,
+            )
 
     def plc_off(self) -> None:
         """

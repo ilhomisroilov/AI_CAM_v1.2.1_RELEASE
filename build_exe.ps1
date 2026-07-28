@@ -62,6 +62,7 @@ if ($LASTEXITCODE -ne 0) { throw "Executable --dry-run failed ($LASTEXITCODE)" }
 
 Write-Host "[build] Executable hardware-free startup smoke..."
 & $venvPython (Join-Path $releaseRoot "tools\smoke_startup.py") $exe `
+    --port 18083 `
     --log (Join-Path $distRoot "runtime\logs\startup-smoke.log")
 if ($LASTEXITCODE -ne 0) { throw "Executable startup smoke failed ($LASTEXITCODE)" }
 
@@ -78,6 +79,16 @@ foreach ($relative in @("data", "logs", "crops", "temp", "engraved_ocr_collectio
     Get-ChildItem -LiteralPath $runtimeDir -Force |
         Where-Object { $_.Name -ne ".gitkeep" } |
         Remove-Item -Recurse -Force
+}
+$instanceLock = [System.IO.Path]::GetFullPath((Join-Path $distRoot "runtime\ai-cam.lock"))
+if (-not $instanceLock.StartsWith(
+    [System.IO.Path]::GetFullPath($distRoot) + [System.IO.Path]::DirectorySeparatorChar,
+    [System.StringComparison]::OrdinalIgnoreCase
+)) {
+    throw "Refusing to scrub instance lock outside dist root: $instanceLock"
+}
+if (Test-Path -LiteralPath $instanceLock -PathType Leaf) {
+    Remove-Item -LiteralPath $instanceLock -Force
 }
 $unexpectedRuntimeFiles = Get-ChildItem -LiteralPath (Join-Path $distRoot "runtime") -Recurse -File -Force |
     Where-Object { $_.Name -ne ".gitkeep" }
