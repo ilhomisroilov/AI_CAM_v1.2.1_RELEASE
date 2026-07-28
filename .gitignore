@@ -27,6 +27,8 @@ runtime/engraved_ocr_collection/*
 !runtime/engraved_ocr_collection/.gitkeep
 runtime/dataset_collected/*
 runtime/backups/*
+runtime/audit/*
+!runtime/audit/.gitkeep
 runtime/*.lock
 
 # Legacy runtime locations (must never ship with data)
