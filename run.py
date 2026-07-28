@@ -259,6 +259,9 @@ def parse_args():
                     help="effective layered config ni secretlarsiz JSON ko'rinishida chiqaradi")
     ap.add_argument("--no-hardware", action="store_true",
                     help="PLC/RFIDni simulator-safe rejimga o'tkazadi (smoke/test uchun)")
+    ap.add_argument("--observe-hours", type=float, default=0.0,
+                    help="serverni ishga tushirib N soatlik production observation yig'adi; "
+                         "oxirida reports/PRODUCTION_24H_* fayllarini yozadi")
     ap.add_argument("--deep", action="store_true",
                     help="--self-check bilan real Torch/Paddle tensor amallarini bajaradi")
     ap.add_argument("--require-gpu", action="store_true",
@@ -355,6 +358,15 @@ def main() -> int:
                     PROJECT_ROOT / args.vin_shadow_out,
                     args.vin_shadow_interval,
                 )
+            if args.observe_hours and args.observe_hours > 0:
+                # Real observation of the running system (no mock). Writes the
+                # reports/PRODUCTION_24H_* set when the window elapses.
+                def _observe():
+                    from tools.observe_production import observe, _default_paths
+                    a, d, c, o = _default_paths()
+                    observe(float(args.observe_hours), a, d, c, o, launch=False)
+                threading.Thread(target=_observe, name="production-observer", daemon=True).start()
+                print(f"[OBSERVE] production observation started for {args.observe_hours}h.")
             _print_banner(get_lan_ip())
             import uvicorn
             # reload=False — fon threadlari (kamera/OCR) bilan ziddiyat bo'lmasligi uchun
