@@ -1,7 +1,7 @@
-# Dataset Character Alignment (v1.3.0)
+# Dataset Character Alignment (v1.2.1 stabilization)
 
 The active-learning collector turns hard/uncertain production cases into
-human-reviewable character crops. v1.3.0 removes the pure equal-width 17-sector
+human-reviewable character crops. v1.2.1 Production Stabilization removes the pure equal-width 17-sector
 split from the production training path and records how every crop was aligned.
 
 ## Why not equal 17-sector split

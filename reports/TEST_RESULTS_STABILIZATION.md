@@ -1,10 +1,10 @@
-# Test Results — AI_CAM v1.3.0-rc1
+# Test Results — AI_CAM v1.2.1 Production Stabilization
 
 `pytest tests/` on Windows/CPU (`.venv`): **417 passed, 4 skipped, 0 failed**
 (2m37s). No hardware/GPU required for the suite; the Playwright test drives a real
 headless Chromium.
 
-## New / changed v1.3.0 tests
+## New / changed v1.2.1 Production Stabilization tests
 | file | n | covers |
 |------|---|--------|
 | `test_plc_edge_audit.py` | 12 | debounce, pulse-width, interval, active-cycle, invalid width, audit files |

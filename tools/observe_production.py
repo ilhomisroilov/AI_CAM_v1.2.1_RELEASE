@@ -211,11 +211,14 @@ def collect_metrics(audit_dir: Path, db_path: Path, collection_root: Path) -> di
 
 
 def generate_reports(metrics: dict, out_dir: Path, completed: bool,
-                     duration_hours: float, elapsed_hours: float) -> None:
+                     duration_hours: float, elapsed_hours: float,
+                     metadata: dict = None) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     plc_rows = metrics.pop("_plc_rows", [])
     sessions = metrics.pop("_sessions", [])
     status = "COMPLETED" if completed else "NOT COMPLETED"
+    if metadata is not None:
+        metrics["run_metadata"] = metadata
 
     (out_dir / "PRODUCTION_24H_METRICS.json").write_text(
         json.dumps(metrics, indent=2, default=str), encoding="utf-8")
@@ -238,11 +241,18 @@ def generate_reports(metrics: dict, out_dir: Path, completed: bool,
         w.writerow(["F/E", db.get("fe_conflicts", 0)])
 
     plc = metrics["plc"]; supp = metrics["suppressed"]; ds = metrics["dataset"]
-    md = f"""# AI_CAM Production 24h Audit
+    meta = metadata or {}
+    build_line = ""
+    if meta:
+        build_line = (f"\n**Build (frozen for the window):** version "
+                      f"`{meta.get('version')}` · commit `{(meta.get('git_commit') or '')[:12]}` "
+                      f"· config `{(meta.get('config_hash') or '')[:16]}` · "
+                      f"git_dirty={meta.get('git_dirty')}\n")
+    md = f"""# AI_CAM v1.2.1 Production 24h Audit
 
 **Status: PRODUCTION_24H_AUDIT: {status}** — observed {elapsed_hours:.2f} h of a
 {duration_hours:.0f} h window. Generated {metrics['generated_at']}.
-
+{build_line}
 ## PLC / triggers
 | metric | value |
 |---|---|
@@ -303,7 +313,8 @@ def observe(duration_hours: float, audit_dir: Path, db_path: Path,
     finally:
         elapsed_h = (time.monotonic() - start) / 3600.0
         metrics = collect_metrics(audit_dir, db_path, collection_root)
-        generate_reports(metrics, out_dir, completed, duration_hours, elapsed_h)
+        generate_reports(metrics, out_dir, completed, duration_hours, elapsed_h,
+                         metadata=run_metadata())
         if proc is not None:
             proc.terminate()
             try:
@@ -313,6 +324,50 @@ def observe(duration_hours: float, audit_dir: Path, db_path: Path,
     print(f"[OBSERVE] {'COMPLETED' if completed else 'NOT COMPLETED'} "
           f"({elapsed_h:.2f}/{duration_hours:.0f}h) -> {out_dir}")
     return 0 if completed else 3
+
+
+def run_metadata() -> dict:
+    """Freeze identity of the observed build: version, git commit, config + model
+    hashes — so the 24h report proves code/config did not change mid-observation."""
+    import hashlib
+    md = {"version": None, "git_commit": None, "git_dirty": None,
+          "config_hash": None, "model_hashes": {}}
+    try:
+        from backend.version import API_VERSION
+        md["version"] = API_VERSION
+    except Exception:
+        pass
+    try:
+        md["git_commit"] = subprocess.run(["git", "rev-parse", "HEAD"], cwd=str(ROOT),
+                                           capture_output=True, text=True, timeout=10).stdout.strip()
+        md["git_dirty"] = bool(subprocess.run(["git", "status", "--porcelain"], cwd=str(ROOT),
+                                              capture_output=True, text=True, timeout=10).stdout.strip())
+    except Exception:
+        pass
+
+    def _sha(p: Path):
+        try:
+            h = hashlib.sha256()
+            with p.open("rb") as f:
+                for chunk in iter(lambda: f.read(1 << 20), b""):
+                    h.update(chunk)
+            return h.hexdigest()
+        except Exception:
+            return None
+    try:
+        from backend.config import (BASE_DIR, MODELS_DIR, TRAINED_MODEL_PATH,
+                                     PADDLE_DET_DIR, PADDLE_REC_DIR, PADDLE_CLS_DIR)
+        md["config_hash"] = _sha(BASE_DIR / "config" / "settings.yaml")
+        md["model_hashes"] = {
+            "yolo": _sha(TRAINED_MODEL_PATH),
+            "engraved_onnx": _sha(MODELS_DIR / "engraved_ocr_v1.2.1" / "model.onnx"),
+            "paddle_det": _sha(PADDLE_DET_DIR / "inference.pdmodel"),
+            "paddle_rec": _sha(PADDLE_REC_DIR / "inference.pdmodel"),
+            "paddle_cls": _sha(PADDLE_CLS_DIR / "inference.pdmodel"),
+        }
+    except Exception:
+        pass
+    return md
 
 
 def _default_paths():
@@ -340,7 +395,8 @@ def main(argv=None) -> int:
     if args.report_only:
         metrics = collect_metrics(Path(args.audit_dir), Path(args.db), Path(args.collection_root))
         generate_reports(metrics, Path(args.out), completed=False,
-                         duration_hours=args.duration_hours, elapsed_hours=0.0)
+                         duration_hours=args.duration_hours, elapsed_hours=0.0,
+                         metadata=run_metadata())
         print(f"[OBSERVE] report-only -> {args.out}")
         return 0
     return observe(args.duration_hours, Path(args.audit_dir), Path(args.db),

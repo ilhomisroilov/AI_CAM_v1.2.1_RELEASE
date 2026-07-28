@@ -1,4 +1,4 @@
-# AI_CAM Architecture (v1.3.0)
+# AI_CAM Architecture (v1.2.1 stabilization)
 
 Industrial engraved-VIN OCR for Station 509. One PLC trigger (**D2222**) starts one
 body-cycle that produces exactly **one** final database record.
@@ -48,15 +48,17 @@ writable state in `runtime/{data,logs,crops,temp,backups,engraved_ocr_collection
 No `/opt`, `/etc`, `/var`, systemd, or service-user dependency. One command:
 `python run.py`.
 
-## Release workflow
+## Stabilization workflow
+
+No new version tag or release is declared until the 24-hour observation passes.
 
 ```mermaid
 flowchart LR
-  code[code + tests] --> rc[tag v1.3.0-rc1\nbranch release/v1.3.0-reliability]
-  rc --> push[push origin + gh prerelease]
-  push --> obs[24h production observation\non Ubuntu GPU host]
-  obs -->|PASS| final[tag v1.3.0 + final release]
-  obs -->|NOT COMPLETED / FAIL| rc
+  code[code + tests\nbranch stabilization/v1.2.1-production] --> pre[morning_preflight --require-gpu]
+  pre -->|PASS| obs[run.py --observe-hours 24\non Ubuntu GPU host]
+  pre -->|BLOCKED| code
+  obs -->|PASS| tag[only then: tag + release]
+  obs -->|NOT COMPLETED / FAIL| code
 ```
 
 See `PLC_AND_CONFIG.md`, `OCR_FUSION.md`, `DATASET_CHARACTER_ALIGNMENT.md`,

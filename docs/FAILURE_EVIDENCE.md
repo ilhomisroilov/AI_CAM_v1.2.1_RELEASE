@@ -1,4 +1,4 @@
-# Failure Evidence (v1.3.0)
+# Failure Evidence (v1.2.1 stabilization)
 
 Every capture that decodes frames but fails to produce a VIN must leave an image.
 **Invariant:** `decoded_frames > 0 AND no final VIN ⇒ evidence image path is not

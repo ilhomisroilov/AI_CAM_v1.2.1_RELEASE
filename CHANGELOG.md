@@ -1,9 +1,10 @@
 # Changelog
 
-## 1.3.0-rc1 — 2026-07-28 (release candidate)
+## [Unreleased — v1.2.1 Production Stabilization]
 
-Reliability & OCR dataset overhaul (branch `release/v1.3.0-reliability`). Final
-`v1.3.0` is gated on a 24-hour production observation on the Ubuntu GPU host.
+Hardening of the running v1.2.1 system for a 24-hour production observation on the
+Ubuntu GPU host (branch `stabilization/v1.2.1-production`). No new version tag or
+release is declared until that observation completes.
 
 - **PLC forensic audit** of D2222: debounced rising/falling timeline with
   pulse-width, inter-edge interval, ring-buffer context and per-edge decision

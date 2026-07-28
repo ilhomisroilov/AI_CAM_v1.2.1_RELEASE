@@ -1,4 +1,4 @@
-# AI_CAM v1.3.0 (rc1)
+# AI_CAM v1.2.1 — Production Stabilization
 
 AI_CAM is an industrial engraved-VIN capture service for **Station 509**: SICK
 camera + YOLO plate detection, a three-engine OCR stack (ENGRAVED_V121 primary
@@ -11,12 +11,14 @@ Portable and self-contained: runtime data under `runtime/`, all models under
 `models/`, no user-profile cache. One command: **`python run.py`**. No `/opt`,
 `/etc`, `/var`, systemd or service-user dependency.
 
-> **v1.3.0-rc1** adds: D2222 forensic edge audit; the production body-cycle
-> invariant (duplicate/early triggers suppressed, no queue); a strict YOLO ≥ 0.90
-> OCR gate; F/E·U/V disagreement audit + weak-position guard; VIN-locked retry
-> cancel; character-alignment that never ships an equal-width split as training
-> data; failure-evidence images; and a real 24h production-observation tool. Final
-> `v1.3.0` is gated on that 24h run on the Ubuntu GPU host.
+> **v1.2.1 Production Stabilization (unreleased)** hardens the running system for a
+> 24-hour production observation: D2222 forensic edge audit; the production
+> body-cycle invariant (duplicate/early triggers suppressed, no queue); a strict
+> YOLO ≥ 0.90 OCR gate; F/E·U/V disagreement audit + weak-position guard; VIN-locked
+> retry cancel; character-alignment that never ships an equal-width split as
+> training data; failure-evidence images; and a real 24h production-observation
+> tool. No new version tag or release is declared until that 24h observation
+> completes on the Ubuntu GPU host.
 
 ## Documentation
 - Architecture + diagrams: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
@@ -25,7 +27,7 @@ Portable and self-contained: runtime data under `runtime/`, all models under
 - Failure evidence: [docs/FAILURE_EVIDENCE.md](docs/FAILURE_EVIDENCE.md)
 - 24h observation: [docs/PRODUCTION_OBSERVATION.md](docs/PRODUCTION_OBSERVATION.md)
 - PLC & config: [docs/PLC_AND_CONFIG.md](docs/PLC_AND_CONFIG.md) · Run guide: [docs/SIMPLE_RUN_GUIDE.md](docs/SIMPLE_RUN_GUIDE.md)
-- Release notes: [docs/releases/v1.3.0-rc1.md](docs/releases/v1.3.0-rc1.md) · Doc inventory: [docs/DOCUMENTATION_INVENTORY.md](docs/DOCUMENTATION_INVENTORY.md)
+- Changelog: [CHANGELOG.md](CHANGELOG.md) · Doc inventory: [docs/DOCUMENTATION_INVENTORY.md](docs/DOCUMENTATION_INVENTORY.md)
 
 ## Hardware (Station 509)
 | device | address | notes |

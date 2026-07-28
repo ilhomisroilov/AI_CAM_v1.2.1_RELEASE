@@ -1,6 +1,6 @@
-# AI_CAM v1.3.0 Reliability & OCR Dataset Overhaul — Report
+# AI_CAM v1.2.1 Production Stabilization Reliability & OCR Dataset Overhaul — Report
 
-Branch `release/v1.3.0-reliability`. Built and verified on a Windows/CPU dev box;
+Branch `stabilization/v1.2.1-production`. Built and verified on a Windows/CPU dev box;
 GPU (`cuda:0`, Paddle-GPU) and live hardware (D2222 / R700 / SICK camera) and the
 24h observation are **NOT run here** — they belong to the Ubuntu production host and
 are marked accordingly. Nothing is faked.
@@ -25,7 +25,7 @@ are marked accordingly. Nothing is faked.
 | 13 | README / ARCHITECTURE / OCR_FUSION / DATASET_CHARACTER_ALIGNMENT / release notes | DONE | this commit |
 | 14 | Markdown inventory (KEEP/UPDATE/MERGE/ARCHIVE/DELETE) | DONE | `docs/DOCUMENTATION_INVENTORY.md` |
 | 15 | Full regression | DONE | **417 passed, 4 skipped, 0 failed** |
-| 16 | `v1.3.0-rc1` tag | see release section | — |
+| 16 | `v1.2.1 Production Stabilization` tag | see release section | — |
 | 17 | Push branch + tag to origin | see release section | — |
 | 18 | `gh` prerelease | see release section | — |
 | — | 24-hour production observation | **NOT COMPLETED** (no hardware here) | run on Ubuntu host |
@@ -48,4 +48,4 @@ disagreement/guard · `b0ab59b` failure evidence · `fb415c5` observation tool �
 docs/release (this commit).
 
 Rollback: `git checkout master` (production untouched); the overhaul is isolated on
-`release/v1.3.0-reliability`.
+`stabilization/v1.2.1-production`.

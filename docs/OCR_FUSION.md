@@ -1,4 +1,4 @@
-# OCR Fusion & Three-Engine Evidence (v1.3.0)
+# OCR Fusion & Three-Engine Evidence (v1.2.1 stabilization)
 
 Every accepted OCR job runs three engines **concurrently** against the same
 session-owned crop, stores each result **separately**, and applies a guarded
@@ -17,7 +17,7 @@ Each engine row (`ocr_engine_results`) keeps: `raw_text`, `gated_text`,
 `preprocessing_profile`, `model_name/version/checksum`, `latency_ms`, `status`,
 `error_code`. The single production decision lands in `vin_records.final_ocr_*`.
 
-## Submit gate (v1.3.0 item 1)
+## Submit gate (v1.2.1 Production Stabilization item 1)
 `_submit_ocr_frames` enforces **`YOLO peak confidence >= detection.ocr_submit_min_yolo_conf`
 (0.90)** before any OCR runs. Crop quality (`best_q`) can no longer override a low
 detector confidence. Additional gates: ≥2 stable detections, bbox IoU, crop

@@ -1,4 +1,4 @@
-# Production Observation (v1.3.0)
+# Production Observation (v1.2.1 stabilization)
 
 24-hour observation of the **real** running system (no mock). Aggregates the
 artifacts AI_CAM already writes into a fixed report set.
@@ -26,6 +26,6 @@ python tools/observe_production.py --report-only          # generate now from cu
 
 ## Honesty gate
 If the window does not fully elapse, the audit is written as
-**`PRODUCTION_24H_AUDIT: NOT COMPLETED`**. Do **not** declare final `v1.3.0` until a
+**`PRODUCTION_24H_AUDIT: NOT COMPLETED`**. Do **not** declare final `v1.2.1 Production Stabilization` until a
 real 24h run on the Ubuntu GPU host completes with duplicate records = 0, queued
 triggers = 0, missing evidence (decoded>0) = 0, and equal-split training samples = 0.

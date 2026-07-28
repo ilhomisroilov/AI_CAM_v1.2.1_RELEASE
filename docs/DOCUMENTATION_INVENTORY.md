@@ -1,4 +1,4 @@
-# Documentation Inventory (v1.3.0)
+# Documentation Inventory (v1.2.1 stabilization)
 
 Decision per Markdown file. Physical `ARCHIVE`/`DELETE` moves are a documented
 follow-up (not executed here) to avoid breaking in-repo links mid-release; git
@@ -7,7 +7,7 @@ history preserves everything regardless.
 ## Current & canonical — KEEP / UPDATE
 | file | decision |
 |------|----------|
-| `README.md` (root) | UPDATE — v1.3.0 overview + Mermaid + doc links |
+| `README.md` (root) | UPDATE — v1.2.1 Production Stabilization overview + Mermaid + doc links |
 | `docs/ARCHITECTURE.md` | KEEP (new) |
 | `docs/OCR_FUSION.md` | KEEP (new) |
 | `docs/DATASET_CHARACTER_ALIGNMENT.md` | KEEP (new) |
@@ -20,8 +20,8 @@ history preserves everything regardless.
 | `docs/OCR_V121_{ARCHITECTURE,DATABASE,COLLECTION_WORKFLOW,DEPLOYMENT,OPERATIONS,ROLLBACK}.md` | KEEP — still accurate for the OCR engine layer |
 | `docs/UBUNTU_26_{DEPLOYMENT,GPU,OPERATIONS,NETWORK,BACKUP_RESTORE,TROUBLESHOOTING}.md` | KEEP — Ubuntu host runbooks |
 | `docs/RUNTIME_DEPLOYMENT.md`, `docs/ROLLBACK.md`, `docs/VIN_OCR_PIPELINE.md` | KEEP |
-| `CHANGELOG.md`, `docs/releases/v1.3.0-rc1.md` | UPDATE / KEEP |
-| `reports/RELIABILITY_REFACTOR_REPORT.md`, `reports/TEST_RESULTS_V1.3.0_RC1.md` | KEEP (new) |
+| `CHANGELOG.md`, `CHANGELOG.md` | UPDATE / KEEP |
+| `reports/RELIABILITY_REFACTOR_REPORT.md`, `reports/TEST_RESULTS_STABILIZATION.md` | KEEP (new) |
 
 ## Historical / superseded — ARCHIVE (move to docs/archive/ later)
 | file | decision |
@@ -38,7 +38,7 @@ history preserves everything regardless.
 | `reports/V121_*.md`, `reports/UBUNTU_*_CHECKPOINT.md`, `reports/CONTINUATION_CHECKPOINT.md`, `reports/FINAL_RELEASE_CONSOLIDATION_REPORT.md` | ARCHIVE — prior-release artifacts |
 
 ## MERGE
-- `reports/TEST_RESULTS.md` → MERGE into `reports/TEST_RESULTS_V1.3.0_RC1.md` (keep the v1.3.0 one canonical).
+- `reports/TEST_RESULTS.md` → MERGE into `reports/TEST_RESULTS_STABILIZATION.md` (keep the v1.2.1 Production Stabilization one canonical).
 - `docs/PORTABLE_RUNTIME_REPORT.md` + `reports/FINAL_PORTABLE_VALIDATION.md` → MERGE the portable-runtime story under one report; both KEEP for now.
 
 ## DELETE
