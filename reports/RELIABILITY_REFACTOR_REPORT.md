@@ -24,12 +24,12 @@ are marked accordingly. Nothing is faked.
 | 12 | `tools/observe_production.py` + 24h report generator | DONE (tool) | `test_observe_production_v13.py`; 24h run: on server |
 | 13 | README / ARCHITECTURE / OCR_FUSION / DATASET_CHARACTER_ALIGNMENT / release notes | DONE | this commit |
 | 14 | Markdown inventory (KEEP/UPDATE/MERGE/ARCHIVE/DELETE) | DONE | `docs/DOCUMENTATION_INVENTORY.md` |
-| 15 | Full regression | DONE | **417 passed, 4 skipped, 0 failed** |
-| 16 | `v1.2.1 Production Stabilization` tag | see release section | — |
-| 17 | Push branch + tag to origin | see release section | — |
-| 18 | `gh` prerelease | see release section | — |
+| 15 | Full regression | DONE | **421 passed, 4 skipped, 0 failed** |
+| 16 | Morning preflight (`tools/morning_preflight.py --require-gpu`) | DONE | `test_stabilization_tools_v13.py`; verified PASS on clean tree |
+| 17 | Observation run-metadata (version/commit/config/model hashes) | DONE | stamped into `PRODUCTION_24H_*` |
+| — | New release tag / GitHub release | **NOT CREATED (by design)** | withheld until the 24h observation passes |
 | — | 24-hour production observation | **NOT COMPLETED** (no hardware here) | run on Ubuntu host |
-| — | Real GPU / hardware integration | **NOT COMPLETED** (no GPU/LAN here) | `run.py --self-check --require-gpu` on host |
+| — | Real GPU / hardware integration | **NOT COMPLETED** (no GPU/LAN here) | `python tools/morning_preflight.py --require-gpu` on host |
 
 ## Key root causes addressed
 - **best_q could override YOLO** → strict submit gate (item 1).
@@ -42,10 +42,14 @@ are marked accordingly. Nothing is faked.
 - **Decoded-but-failed cycles had empty evidence** → failure-evidence saver
   (items 10, 11).
 
-## Commits (this overhaul, on top of the PLC/session slice)
+## Commits (on top of the PLC/session slice `6e3b9f0`)
 `a630f38` YOLO gate + VIN lock · `99b5f8d` dataset alignment · `44c5fb7`
 disagreement/guard · `b0ab59b` failure evidence · `fb415c5` observation tool ·
-docs/release (this commit).
+`f4e1f68` docs · `e1ba31c` v1.2.1 stabilization metadata correction (VERSION 1.2.1,
+branch rename, v1.3.0-rc1 tag deleted, morning preflight) · `chore` runtime/audit gitkeep.
 
-Rollback: `git checkout master` (production untouched); the overhaul is isolated on
+No version tag or GitHub release is created; that is withheld until the 24-hour
+observation passes on the Ubuntu GPU host.
+
+Rollback: `git checkout master` (production untouched); the work is isolated on
 `stabilization/v1.2.1-production`.

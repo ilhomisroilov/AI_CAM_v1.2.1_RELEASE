@@ -38,6 +38,8 @@ from pathlib import Path
 from typing import Optional
 
 ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))  # allow `backend.*` imports when run as a script
 
 CONFUSABLE = {("U", "V"), ("V", "U"), ("E", "F"), ("F", "E")}
 
