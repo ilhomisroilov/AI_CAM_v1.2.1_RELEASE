@@ -202,7 +202,17 @@ ocr_release:
   # Enhanced act as independent validators/fallback. All guards (confidence,
   # supported charset, 17-char, segmentation, weak-class, disagreement) apply —
   # unseen/weak characters are never invented (returned as UNKNOWN_CHAR).
-  release_mode: GUARDED_PRIMARY
+  # HOTFIX RC1 (2026-07-30) — ATAYLAB `SHADOW` ga QAYTARILDI.
+  # Sabab: ENGRAVED_V121 charset = "0123456789ABCDEFHJNST" (21 belgi) va u
+  # G, U, V, W belgilarini UMUMAN ifodalay olmaydi. pos10 yil kodlari
+  # {T,U,V,W} bo'lgani uchun bu model 4 tadan 3 tasini hech qachon
+  # to'g'ri o'qiy olmaydi. Ishlab chiqarish dalili: 95/95 sessiyada
+  # status=EMPTY. `GUARDED_PRIMARY` bugun faqat ikki hujjatlanmagan
+  # himoya tufayli zarar keltirmayapti (`write_final=False` va
+  # `record_legacy_shadow_final` ning qat'iy qiymatlari). Bu qiymatni
+  # bevosita `SHADOW` ga qadab qo'yamiz — himoyalarga tayanmaymiz.
+  # Tekshiruv: tests/test_engraved_shadow_only_hotfix_guard.py
+  release_mode: SHADOW
   engraved_enabled: true
   engraved_model_dir: models/engraved_ocr_v1.2.1
   engraved_expected_length: 17

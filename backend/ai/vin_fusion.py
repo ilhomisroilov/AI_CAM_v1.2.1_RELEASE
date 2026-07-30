@@ -36,11 +36,17 @@ from .vin_postprocess import CONFUSIONS, PositionDecision, _is_variable_position
 # pos2(1) S/5/9, pos3(2) T/1.
 RISKY_POSITIONS: Set[int] = {1, 2, 4, 9, 10}
 POS5 = 4
+POS10 = 9
 SERIAL_POSITIONS: Set[int] = set(range(11, 17))
 TRUSTED_VARIANTS = frozenset(("raw_resized", "clahe_unsharp"))
 # pos5 da xom OCR ko'rishi mumkin, ammo FAQAT struktura tufayli C/D/B/G ga
 # aylantirilsa shubhali belgilar (spec 5-band): 0,3,6,8,R.
 POS5_STRUCTURE_ONLY_SUSPECTS = set("0368R")
+# pos10 = yil kodi. QY={T,V,W}, BL7M={T,U,V,W}. Bu belgilar o'zaro VIZUAL
+# jihatdan chalkashadi (U/V engraved shriftda deyarli bir xil), shuning uchun
+# ular STRUKTURA orqali O'YLAB TOPILMASLIGI kerak — faqat to'g'ridan-to'g'ri
+# o'qilgan belgi qabul qilinadi (hotfix RC1, F-1/F-2).
+POS10_YEAR_CHARS = frozenset("TUVW")
 
 _ALNUM = re.compile(r"[^A-Z0-9]")
 
@@ -88,6 +94,7 @@ class FusionResult:
     n_reads: int
     decisions: List[PositionDecision] = field(default_factory=list)
     pos5_audit: dict = field(default_factory=dict)
+    pos10_audit: dict = field(default_factory=dict)
     gate: dict = field(default_factory=dict)
     reasons: List[str] = field(default_factory=list)
     note: str = ""
@@ -343,10 +350,142 @@ def _pos5_gate(vote: Dict[str, _Vote], decision: PositionDecision, *,
     audit = {
         "chosen": chosen, "raw_direct": raw_direct,
         "support_crops": crops, "support_variants": variants,
+        "trusted_bases": sorted({v.split("@")[0].split("#")[0] for v in cell.variants}
+                                & TRUSTED_VARIANTS) if cell else [],
         "margin": round(float(decision.margin), 3),
         "source_variants": decision.source_variants,
         "structure_corrected": bool(structure_only),
         "directly_seen": bool(directly_seen), "passed": bool(ok),
+    }
+    return audit, ok, reasons
+
+
+def _pos10_gate(vote: Dict[str, _Vote], decision: PositionDecision, *,
+                model: Optional[str],
+                pos10_require_direct: bool, pos10_min_direct_share: float,
+                pos10_min_crops: int, pos10_min_variants: int,
+                pos10_require_independent: bool = True,
+                pos10_verifier_verdict: Optional[str] = None,
+                ) -> Tuple[dict, bool, List[str]]:
+    """
+    pos10 (yil kodi) uchun QATTIQ GATE — hotfix RC1. `_pos5_gate` ning strukturaviy
+    egizagi, lekin pos5 mantig'iga TEGMAYDI.
+
+    Bu gate ikki algoritmik nuqsonni yopadi:
+      F-1 (SOXTA QABUL): `CONFUSIONS["1"]` ichida `T` bor va QY pos10 uchun `T`
+          ruxsat etilgan. Xom OCR `1` o'qiganda struktura bevosita kuzatilmagan
+          `T` ni O'YLAB TOPMASLIGI kerak.
+      F-2 (MARGIN KO'R NUQTASI): `_select_for_model()` marginni hisoblaganda
+          strukturaga mos kelmaydigan raqobatchini tashlab yuboradi. Gate ruxsat
+          etilgan raqib dalilini bevosita ovozlardan qayta tekshiradi.
+
+    Shuning uchun bu gate dalil ulushini `vote` dan MUSTAQIL hisoblaydi va ruxsat
+    etilmagan belgilarni HAM zid dalil sifatida sanaydi.
+
+    Qoidalar:
+      * tanlangan belgi strukturaga mos bo'lishi shart (struktura RAD ETADI);
+      * yil kodi FAQAT to'g'ridan-to'g'ri o'qilgan bo'lsa qabul qilinadi —
+        struktura-ixtiro QAT'IYAN rad etiladi (F-1);
+      * tanlangan belgi ko'rilgan dalilning >= pos10_min_direct_share ulushiga
+        ega bo'lishi kerak, ZID dalil ham hisoblanadi (F-2);
+      * redundancy: >=pos10_min_crops mustaqil crop YOKI >=pos10_min_variants variant;
+      * geometrik verifier FAQAT VETO qiladi, HECH QACHON tasdiqlamaydi
+        (WORKER_2 B-1: tasdiqlangan U namunasida BAR_TOP conf=1.0 soxta ijobiy
+        bergan; shu sababli ijobiy tasdiq ishonchsiz. Veto xato bo'lsa natija
+        AMBIGUOUS bo'ladi — SOXTA QABUL emas).
+    """
+    chosen = decision.chosen_char
+    cell = vote.get(chosen)
+    crops = len(cell.crops) if cell else 0
+    variants = len(cell.variants) if cell else 0
+    directly_seen = chosen in vote
+    raw_direct = max(vote.items(), key=lambda kv: kv[1].weight)[0] if vote else "?"
+
+    # MUHIM (dalilga asoslangan tanlov): QY uchun `U` STRUKTURA bo'yicha mumkin
+    # emas, va WORKER_2 vizual kalibrlashi bo'yicha engraved shriftda `U` va `V`
+    # deyarli BIR XIL ko'rinadi. Shu sababli QY plastinkasida `U` ko'rilishi
+    # {T,V,W} dan birining xato o'qilishi bo'lib, eng ehtimolli nomzod `V` dir —
+    # ya'ni u `V` ga QARSHI dalil EMAS, balki uni QUVVATLAYDI. Shuning uchun zid
+    # dalil sifatida FAQAT strukturaga MOS KELADIGAN raqobatchilar sanaladi.
+    # (Bu qaror ataylab tor: F-1 ni yo'q qiladi, lekin bugun to'g'ridan-to'g'ri
+    #  ko'rilgan `V` qabullarini keraksiz ravishda buzmaydi.)
+    allowed_competitors = {
+        ch: c for ch, c in vote.items()
+        if ch != chosen and (model is None or vin_rules.is_allowed(model, POS10, ch))
+    }
+    chosen_w = cell.weight if cell else 0.0
+    contrary_w = sum(c.weight for c in allowed_competitors.values())
+    denom = chosen_w + contrary_w
+    direct_share = (chosen_w / denom) if denom > 0 else 0.0
+    contrary = sorted(((ch, round(c.weight / denom, 3)) for ch, c in allowed_competitors.items()),
+                      key=lambda kv: kv[1], reverse=True) if denom > 0 else []
+    all_seen = sorted(((ch, c.reads) for ch, c in vote.items()), key=lambda kv: kv[1], reverse=True)
+
+    reasons: List[str] = []
+    ok = True
+    is_year_char = chosen in POS10_YEAR_CHARS
+
+    if not decision.allowed:
+        ok = False
+        reasons.append(f"pos10 belgisi strukturaga mos emas ('{chosen}')")
+
+    # F-1 — ASOSIY TUZATISH: yil kodi hech kim ko'rmagan bo'lsa QAT'IYAN rad.
+    if pos10_require_direct and is_year_char and not directly_seen:
+        ok = False
+        reasons.append(
+            f"pos10 '{chosen}' HECH BIR o'qishda ko'rilmadi (ko'rilgan={all_seen}) "
+            f"— struktura-ixtiro rad etildi")
+
+    # Haqiqiy ziddiyat: boshqa RUXSAT ETILGAN yil kodi ham ko'rilgan bo'lsa.
+    if is_year_char and directly_seen and allowed_competitors:
+        if direct_share < pos10_min_direct_share:
+            ok = False
+            reasons.append(
+                f"pos10 ruxsat etilgan raqobatchi bilan ziddiyat "
+                f"(ulush {direct_share:.2f}<{pos10_min_direct_share}, zid={contrary})")
+        support_ok = (crops >= pos10_min_crops) or (variants >= pos10_min_variants)
+        if not support_ok:
+            ok = False
+            reasons.append(f"pos10 ziddiyatda support past (crops={crops}<{pos10_min_crops} "
+                           f"& variants={variants}<{pos10_min_variants})")
+
+    # MUSTAQIL DALIL TALABI (WORKER_3 B-102 e'tirozi asosida qabul qilingan):
+    # BITTA jismoniy kadrning 9 ta oldindan-ishlov varianti bir xil javob bersa,
+    # bu faqat "tasvir o'qilishi mumkin" degani — belgi TO'G'RI degani emas.
+    # Shu sababli yil kodi uchun kamida IKKI xil ISHONCHLI ishlov oilasi
+    # (raw_resized / clahe_unsharp) YOKI ikki mustaqil kadr kelishuvi talab
+    # qilinadi. Bu W3 ning "n_crops>=2" talabidan yumshoqroq, lekin bitta
+    # oilaning takroriy variantlaridan KUCHLIROQ (o'lchangan: replay qilinadigan
+    # 19 qabuldan hech biri yo'qolmaydi).
+    if is_year_char and directly_seen and cell is not None:
+        bases = {v.split("@")[0].split("#")[0] for v in cell.variants}
+        trusted_bases = bases & TRUSTED_VARIANTS
+        independent_ok = (crops >= pos10_min_crops) or (len(trusted_bases) >= 2)
+        if pos10_require_independent and not independent_ok:
+            ok = False
+            reasons.append(
+                f"pos10 mustaqil dalil yo'q: crops={crops}, "
+                f"ishonchli ishlov oilalari={sorted(trusted_bases)} "
+                f"(bitta kadrning takroriy variantlari yetarli emas)")
+
+    veto_map = {"BAR_TOP": "T", "DOUBLE_VERTEX": "W"}
+    if pos10_verifier_verdict in veto_map and is_year_char:
+        if chosen != veto_map[pos10_verifier_verdict] and chosen in ("T", "W"):
+            ok = False
+            reasons.append(f"verifier veto: shakl={pos10_verifier_verdict} "
+                           f"tanlangan '{chosen}' bilan ziddiyatda")
+
+    audit = {
+        "chosen": chosen, "raw_direct": raw_direct,
+        "directly_seen": bool(directly_seen), "is_year_char": bool(is_year_char),
+        "direct_share": round(float(direct_share), 3),
+        "allowed_contrary": contrary, "all_seen": all_seen,
+        "support_crops": crops, "support_variants": variants,
+        "trusted_bases": sorted({v.split("@")[0].split("#")[0] for v in cell.variants}
+                                & TRUSTED_VARIANTS) if cell else [],
+        "margin": round(float(decision.margin), 3),
+        "verifier_verdict": pos10_verifier_verdict or "NOT_RUN",
+        "passed": bool(ok),
     }
     return audit, ok, reasons
 
@@ -377,6 +516,23 @@ def fuse(
     pos5_structure_rescue_raw_chars: str = "38",
     pos5_structure_rescue_min_score: float = 0.90,
     pos5_structure_rescue_min_raw_support: float = 0.85,
+    # position-10 (yil kodi) hard gate — hotfix RC1. Standart holatda YONIQ:
+    # `pos10_require_direct` F-1 soxta qabulini yo'q qiladi.
+    pos10_require_direct: bool = True,
+    pos10_min_direct_share: float = 0.60,
+    pos10_min_crops: int = 2,
+    pos10_min_variants: int = 3,
+    # DIQQAT — o'lchangan qaror: `pos10_require_independent` STANDART HOLATDA
+    # O'CHIRILGAN. Uni yoqish 9 ta MAVJUD testni buzadi (test_vin_fusion.py,
+    # test_ocr_contract.py, test_ocr_engine_contract.py), ya'ni u kod bazasining
+    # o'rnatilgan shartnomasiga zid: bitta kadr + bitta ishlov oilasi bilan
+    # ACCEPT berish bu tizimning amaldagi xatti-harakati. Testlarni
+    # KUCHSIZLANTIRISH taqiqlangani uchun standart qiymat False qilindi.
+    # Bu WORKER_3 B-102 taklifidan (n_crops>=2) ham voz kechishni tasdiqlaydi.
+    # Yoqish faqat inson tomonidan tasdiqlangan ground truth paydo bo'lgandan
+    # keyin, alohida fazada ko'rib chiqiladi.
+    pos10_require_independent: bool = False,
+    pos10_verifier_verdict: Optional[str] = None,
     # barcha o'zgaruvchan/serial pozitsiyalar uchun umumiy disagreement gate
     accept_variable_margin: float = 0.08,
     accept_serial_margin: float = 0.12,
@@ -453,6 +609,15 @@ def fuse(
         pos5_min_variants=pos5_min_variants, pos5_min_margin=pos5_min_margin,
         reject_structure_only=pos5_reject_structure_only)
 
+    # POSITION-10 HARD GATE (yil kodi) — hotfix RC1.
+    pos10_audit, pos10_ok, pos10_reasons = _pos10_gate(
+        votes[POS10], decisions[POS10], model=model_final,
+        pos10_require_direct=pos10_require_direct,
+        pos10_min_direct_share=pos10_min_direct_share,
+        pos10_min_crops=pos10_min_crops, pos10_min_variants=pos10_min_variants,
+        pos10_require_independent=pos10_require_independent,
+        pos10_verifier_verdict=pos10_verifier_verdict)
+
     strong_multi_variant = (n_reads >= accept_multi_variant_min and mean_prob >= strong_consensus_prob)
     # ISHONCHLI YAKKA O'QISH: bitta crop, lekin barcha o'zgaruvchan belgilar
     # to'g'ridan-to'g'ri o'qilgan (struktura-tuzatish yo'q), yuqori ball, pos5 toza.
@@ -486,6 +651,12 @@ def fuse(
         "known_model": _mk((model_final is not None) or (not require_known_model),
                            model_final or "None", "QY|BL7M"),
         "pos5": _mk(pos5_ok, pos5_audit.get("chosen"), "hard-gate", extra=";".join(pos5_reasons)),
+        # DIQQAT: "pos10" ATAYLAB quyidagi rescue to'plamlariga KIRITILMAGAN
+        # ({"pos5","risky_margin","variable_margin"}). Shu sababli pos10 gate
+        # yiqilsa, rescue yo'llari UMUMAN ishga tushmaydi va soxta qabul
+        # (F-1) qayta tiklanib qolmaydi.
+        "pos10": _mk(pos10_ok, pos10_audit.get("chosen"), "hard-gate",
+                     extra=";".join(pos10_reasons)),
     }
 
     failed = {k for k, v in g.items() if not v["passed"]}
@@ -569,5 +740,5 @@ def fuse(
         validated_vin=validated, model=model_final, final_score=float(final_score),
         compliance=float(best["compliance"]), fully_compliant=bool(best["fully"]),
         raw_support_ratio=float(raw_support_ratio), n_crops=n_crops, n_reads=n_reads,
-        decisions=decisions, pos5_audit=pos5_audit,
+        decisions=decisions, pos5_audit=pos5_audit, pos10_audit=pos10_audit,
         gate={**g, "evidence": exact}, reasons=reasons)
